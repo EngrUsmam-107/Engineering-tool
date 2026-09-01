@@ -166,7 +166,6 @@ The final response should feel like a solution written in a university
 Engineering Mechanics textbook, not an AI-generated programming response.
 """
 
-
 # -----------------------------
 # SOLVER FUNCTION
 # -----------------------------
