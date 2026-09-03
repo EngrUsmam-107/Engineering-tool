@@ -297,12 +297,10 @@ STRICT RULES:
 # VISUAL IMAGE SOLUTION
 # -----------------------------
 
-def display_visual_solution(solution):
+def clean_equation(text):
+    """Convert AI notation into clean textbook notation."""
 
-   def clean_equation(text):
-    """Convert common LaTeX/programming-style notation into clean textbook notation."""
-
-    if not text:
+    if text is None:
         return ""
 
     text = str(text)
@@ -333,12 +331,13 @@ def display_visual_solution(solution):
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Remove LaTeX subscripts/braces
+    # Remove LaTeX formatting
     text = text.replace("_{", "")
     text = text.replace("{", "")
     text = text.replace("}", "")
+    text = text.replace("\\", "")
 
-    # Common engineering notation
+    # Engineering force notation
     text = text.replace("F_Ay", "FAy")
     text = text.replace("F_Dy", "FDy")
     text = text.replace("F_A", "FA")
@@ -348,10 +347,7 @@ def display_visual_solution(solution):
     text = text.replace("F_x", "Fx")
     text = text.replace("F_y", "Fy")
 
-    # Remove remaining backslashes
-    text = text.replace("\\", "")
-
-    # Clean excessive spaces
+    # Clean spaces
     text = " ".join(text.split())
 
     return text
@@ -381,35 +377,82 @@ def display_equation(equation):
 
 
 def display_visual_solution(solution):
-    """Display the structured mechanics solution in a student-friendly format."""
 
     if not solution:
         st.error("No solution was generated.")
         return
 
+    if "error" in solution:
+        st.error(solution["error"])
+        return
+
+    # -----------------------------
     # Problem Understanding
+    # -----------------------------
+
     if solution.get("problem_understanding"):
         st.markdown("### 📘 Problem Understanding")
-        st.write(clean_equation(solution["problem_understanding"]))
+        st.write(
+            clean_equation(
+                solution["problem_understanding"]
+            )
+        )
 
+    # -----------------------------
     # Given Data
+    # -----------------------------
+
     if solution.get("given_data"):
         st.markdown("### 📌 Given Data")
 
         for item in solution["given_data"]:
-            st.write("• " + clean_equation(item))
+            st.write(
+                "• " + clean_equation(item)
+            )
 
+    # -----------------------------
     # Required
+    # -----------------------------
+
     if solution.get("required"):
         st.markdown("### 🎯 Required")
-        st.write(clean_equation(solution["required"]))
 
+        required = solution["required"]
+
+        if isinstance(required, list):
+            for item in required:
+                st.write(
+                    "• " + clean_equation(item)
+                )
+        else:
+            st.write(
+                clean_equation(required)
+            )
+
+    # -----------------------------
     # Concept
+    # -----------------------------
+
     if solution.get("concept"):
         st.markdown("### 🧠 Concept Used")
-        st.write(clean_equation(solution["concept"]))
+        st.write(
+            clean_equation(
+                solution["concept"]
+            )
+        )
 
+    # -----------------------------
+    # Concept Equations
+    # -----------------------------
+
+    if solution.get("concept_equations"):
+        for equation in solution["concept_equations"]:
+            display_equation(equation)
+
+    # -----------------------------
     # Solution
+    # -----------------------------
+
     if solution.get("steps"):
         st.markdown("### ✏️ Solution")
 
@@ -422,7 +465,9 @@ def display_visual_solution(solution):
 
             if step.get("explanation"):
                 st.write(
-                    clean_equation(step["explanation"])
+                    clean_equation(
+                        step["explanation"]
+                    )
                 )
 
             if step.get("equations"):
@@ -434,26 +479,10 @@ def display_visual_solution(solution):
                     f"**✅ {clean_equation(step['result'])}**"
                 )
 
-    # Important Note
-    if solution.get("important_note"):
-        st.markdown("### ⚠️ Important Note")
-        st.info(
-            clean_equation(solution["important_note"])
-        )
-
-    # Final Answer
-    if solution.get("final_answer"):
-        st.markdown("### 🏁 Final Answer")
-
-        final_answer = solution["final_answer"]
-
-        if isinstance(final_answer, list):
-            for answer in final_answer:
-                st.success(clean_equation(answer))
-        else:
-            st.success(clean_equation(final_answer))
-
+    # -----------------------------
     # Engineering Check
+    # -----------------------------
+
     if solution.get("engineering_check"):
         st.markdown("### 🔍 Engineering Check")
 
@@ -461,16 +490,47 @@ def display_visual_solution(solution):
 
         if isinstance(checks, list):
             for check in checks:
-                st.write("✅ " + clean_equation(check))
+                st.write(
+                    "✅ " + clean_equation(check)
+                )
         else:
-            st.write("✅ " + clean_equation(checks))
+            st.write(
+                "✅ " + clean_equation(checks)
+            )
 
+    # -----------------------------
+    # Final Answer
+    # -----------------------------
+
+    if solution.get("final_answers"):
+        st.markdown("### 🏁 Final Answer")
+
+        final_answers = solution["final_answers"]
+
+        if isinstance(final_answers, list):
+            for answer in final_answers:
+                st.success(
+                    clean_equation(answer)
+                )
+        else:
+            st.success(
+                clean_equation(final_answers)
+            )
+
+    # -----------------------------
     # Key Learning Point
+    # -----------------------------
+
     if solution.get("key_learning_point"):
         st.markdown("### 💡 Key Learning Point")
+
         st.info(
-            clean_equation(solution["key_learning_point"])
+            clean_equation(
+                solution["key_learning_point"]
+            )
         )
+
+
 # -----------------------------
 # USER INTERFACE
 # -----------------------------
