@@ -371,65 +371,53 @@ def display_equation(equation):
 
 def display_visual_solution(solution):
 
-    if not isinstance(solution, dict):
-        st.error("The image solution could not be displayed.")
-        return
+    def clean_equation(text):
+    """Convert common LaTeX/programming-style notation into clean textbook notation."""
 
-    if solution.get("error"):
-        st.error(solution["error"])
-        return
+    if not isinstance(text, str):
+        return str(text)
 
-    st.markdown("## 📘 Problem Understanding")
+    replacements = {
+        r"\times": " × ",
+        r"\cdot": " × ",
+        r"\div": " ÷ ",
+        r"\sqrt": "√",
+        r"\Sigma": "Σ",
+        r"\theta": "θ",
+        r"\alpha": "α",
+        r"\beta": "β",
+        r"\sin": "sin",
+        r"\cos": "cos",
+        r"\tan": "tan",
+        "imes": "×",
+        "div": "÷",
+        "Sigma": "Σ",
+        "_{": "",
+        "}": "",
+        "$": "",
+        "`": "",
+    }
 
-    understanding = solution.get("problem_understanding", "")
+    for old, new in replacements.items():
+        text = text.replace(old, new)
 
-    if understanding:
-        st.info(understanding)
+    text = text.replace("\\", "")
 
-    st.markdown("## 📌 Given Data")
+    text = text.replace("F_Ay", "FAy")
+    text = text.replace("F_Dy", "FDy")
+    text = text.replace("F_A", "FA")
+    text = text.replace("F_B", "FB")
+    text = text.replace("F_C", "FC")
+    text = text.replace("F_D", "FD")
+    text = text.replace("F_x", "Fx")
+    text = text.replace("F_y", "Fy")
 
-    for item in solution.get("given_data", []):
-        st.markdown(f"- **{clean_equation(item)}**")
+    text = " ".join(text.split())
 
-    st.markdown("## 🎯 Required")
+    return text.strip()
 
-    for item in solution.get("required", []):
-        st.markdown(f"- {clean_equation(item)}")
 
-    st.markdown("## 🧠 Concept Used")
-
-    concept = solution.get("concept", "")
-
-    if concept:
-        st.success(concept)
-
-    concept_equations = solution.get("concept_equations", [])
-
-    if concept_equations:
-        st.markdown("### Governing Equations")
-
-        for equation in concept_equations:
-            display_equation(equation)
-
-    st.markdown("## ✏️ Solution")
-
-    for number, step in enumerate(
-        solution.get("steps", []),
-        start=1
-    ):
-
-        title = step.get("title", f"Step {number}")
-
-        st.markdown(
-            f"### Step {number} — {clean_equation(title)}"
-        )
-
-        explanation = step.get("explanation", "")
-
-        if explanation:
-            st.write(explanation)
-
-        for equation in step.get("equations", []):
+def display_equation(equation):
             display_equation(equation)
 
         result = step.get("result", "")
