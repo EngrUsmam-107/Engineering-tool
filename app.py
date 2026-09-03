@@ -302,26 +302,30 @@ def display_visual_solution(solution):
    def clean_equation(text):
     """Convert common LaTeX/programming-style notation into clean textbook notation."""
 
-    if not isinstance(text, str):
-        return str(text)
+    if not text:
+        return ""
+
+    text = str(text)
 
     replacements = {
-        r"\times": " × ",
-        r"\cdot": " × ",
-        r"\div": " ÷ ",
+        r"\times": "×",
+        r"\cdot": "×",
+        "imes": "×",
+        r"\div": "÷",
+        "div": "÷",
         r"\sqrt": "√",
         r"\Sigma": "Σ",
+        "Sigma": "Σ",
         r"\theta": "θ",
         r"\alpha": "α",
         r"\beta": "β",
         r"\sin": "sin",
         r"\cos": "cos",
         r"\tan": "tan",
-        "imes": "×",
-        "div": "÷",
-        "Sigma": "Σ",
-        "_{": "",
-        "}": "",
+        r"\pm": "±",
+        r"\geq": "≥",
+        r"\leq": "≤",
+        r"\neq": "≠",
         "$": "",
         "`": "",
     }
@@ -329,8 +333,12 @@ def display_visual_solution(solution):
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    text = text.replace("\\", "")
+    # Remove LaTeX subscripts/braces
+    text = text.replace("_{", "")
+    text = text.replace("{", "")
+    text = text.replace("}", "")
 
+    # Common engineering notation
     text = text.replace("F_Ay", "FAy")
     text = text.replace("F_Dy", "FDy")
     text = text.replace("F_A", "FA")
@@ -340,27 +348,30 @@ def display_visual_solution(solution):
     text = text.replace("F_x", "Fx")
     text = text.replace("F_y", "Fy")
 
+    # Remove remaining backslashes
+    text = text.replace("\\", "")
+
+    # Clean excessive spaces
     text = " ".join(text.split())
 
-    return text.strip()
+    return text
 
 
 def display_equation(equation):
-    """Display one equation in a clean textbook style."""
+    """Display one equation in a clean textbook-style box."""
 
     equation = clean_equation(equation)
 
     st.markdown(
         f"""
         <div style="
-            text-align: center;
-            font-size: 20px;
-            font-weight: 500;
-            padding: 10px 14px;
-            margin: 7px 0;
-            border-left: 4px solid #888;
-            background-color: rgba(128,128,128,0.06);
-            overflow-x: auto;
+            text-align:center;
+            font-size:20px;
+            font-weight:500;
+            padding:10px;
+            margin:8px 0;
+            background-color:#f7f7f7;
+            border-radius:8px;
         ">
             {equation}
         </div>
@@ -370,88 +381,96 @@ def display_equation(equation):
 
 
 def display_visual_solution(solution):
+    """Display the structured mechanics solution in a student-friendly format."""
 
-    def clean_equation(text):
-    """Convert common LaTeX/programming-style notation into clean textbook notation."""
+    if not solution:
+        st.error("No solution was generated.")
+        return
 
-    if not isinstance(text, str):
-        return str(text)
+    # Problem Understanding
+    if solution.get("problem_understanding"):
+        st.markdown("### 📘 Problem Understanding")
+        st.write(clean_equation(solution["problem_understanding"]))
 
-    replacements = {
-        r"\times": " × ",
-        r"\cdot": " × ",
-        r"\div": " ÷ ",
-        r"\sqrt": "√",
-        r"\Sigma": "Σ",
-        r"\theta": "θ",
-        r"\alpha": "α",
-        r"\beta": "β",
-        r"\sin": "sin",
-        r"\cos": "cos",
-        r"\tan": "tan",
-        "imes": "×",
-        "div": "÷",
-        "Sigma": "Σ",
-        "_{": "",
-        "}": "",
-        "$": "",
-        "`": "",
-    }
+    # Given Data
+    if solution.get("given_data"):
+        st.markdown("### 📌 Given Data")
 
-    for old, new in replacements.items():
-        text = text.replace(old, new)
+        for item in solution["given_data"]:
+            st.write("• " + clean_equation(item))
 
-    text = text.replace("\\", "")
+    # Required
+    if solution.get("required"):
+        st.markdown("### 🎯 Required")
+        st.write(clean_equation(solution["required"]))
 
-    text = text.replace("F_Ay", "FAy")
-    text = text.replace("F_Dy", "FDy")
-    text = text.replace("F_A", "FA")
-    text = text.replace("F_B", "FB")
-    text = text.replace("F_C", "FC")
-    text = text.replace("F_D", "FD")
-    text = text.replace("F_x", "Fx")
-    text = text.replace("F_y", "Fy")
+    # Concept
+    if solution.get("concept"):
+        st.markdown("### 🧠 Concept Used")
+        st.write(clean_equation(solution["concept"]))
 
-    text = " ".join(text.split())
+    # Solution
+    if solution.get("steps"):
+        st.markdown("### ✏️ Solution")
 
-    return text.strip()
+        for step in solution["steps"]:
 
+            if step.get("title"):
+                st.markdown(
+                    f"#### {clean_equation(step['title'])}"
+                )
 
-def display_equation(equation):
-            display_equation(equation)
+            if step.get("explanation"):
+                st.write(
+                    clean_equation(step["explanation"])
+                )
 
-        result = step.get("result", "")
+            if step.get("equations"):
+                for equation in step["equations"]:
+                    display_equation(equation)
 
-        if result:
-            st.success(
-                f"✅ {clean_equation(result)}"
-            )
+            if step.get("result"):
+                st.markdown(
+                    f"**✅ {clean_equation(step['result'])}**"
+                )
 
-    final_answers = solution.get("final_answers", [])
+    # Important Note
+    if solution.get("important_note"):
+        st.markdown("### ⚠️ Important Note")
+        st.info(
+            clean_equation(solution["important_note"])
+        )
 
-    if final_answers:
-        st.markdown("## 🏁 Final Answer")
+    # Final Answer
+    if solution.get("final_answer"):
+        st.markdown("### 🏁 Final Answer")
 
-        for answer in final_answers:
-            st.success(
-                f"✅ {clean_equation(answer)}"
-            )
+        final_answer = solution["final_answer"]
 
-    checks = solution.get("engineering_check", [])
+        if isinstance(final_answer, list):
+            for answer in final_answer:
+                st.success(clean_equation(answer))
+        else:
+            st.success(clean_equation(final_answer))
 
-    if checks:
-        st.markdown("## 🔍 Engineering Check")
+    # Engineering Check
+    if solution.get("engineering_check"):
+        st.markdown("### 🔍 Engineering Check")
 
-        for check in checks:
-            st.markdown(
-                f"✅ {clean_equation(check)}"
-            )
+        checks = solution["engineering_check"]
 
-    learning = solution.get("key_learning_point", "")
+        if isinstance(checks, list):
+            for check in checks:
+                st.write("✅ " + clean_equation(check))
+        else:
+            st.write("✅ " + clean_equation(checks))
 
-    if learning:
-        st.markdown("## 💡 Key Learning Point")
-        st.info(learning)
+    # Key Learning Point
+    if solution.get("key_learning_point"):
+        st.markdown("### 💡 Key Learning Point")
+        st.info(
+            clean_equation(solution["key_learning_point"])
+        )
 # -----------------------------
 # USER INTERFACE
 # -----------------------------
