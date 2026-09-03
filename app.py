@@ -364,9 +364,11 @@ def display_equation(equation):
             text-align:center;
             font-size:20px;
             font-weight:500;
-            padding:10px;
+            padding:12px 16px;
             margin:8px 0;
-            background-color:#f7f7f7;
+            background-color:rgba(255,255,255,0.06);
+            color:inherit;
+            border:1px solid rgba(255,255,255,0.15);
             border-radius:8px;
         ">
             {equation}
