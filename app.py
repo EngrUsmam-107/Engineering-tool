@@ -299,14 +299,13 @@ STRICT RULES:
 
 def display_visual_solution(solution):
 
-    def clean_equation(text):
+   def clean_equation(text):
     """Convert common LaTeX/programming-style notation into clean textbook notation."""
 
     if not isinstance(text, str):
         return str(text)
 
     replacements = {
-        # Math symbols
         r"\times": " × ",
         r"\cdot": " × ",
         r"\div": " ÷ ",
@@ -315,22 +314,14 @@ def display_visual_solution(solution):
         r"\theta": "θ",
         r"\alpha": "α",
         r"\beta": "β",
-
-        # Functions
         r"\sin": "sin",
         r"\cos": "cos",
         r"\tan": "tan",
-
-        # Common malformed versions sometimes produced by the model
         "imes": "×",
         "div": "÷",
         "Sigma": "Σ",
-
-        # Subscript notation
         "_{": "",
         "}": "",
-
-        # Remove LaTeX delimiters
         "$": "",
         "`": "",
     }
@@ -338,10 +329,8 @@ def display_visual_solution(solution):
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Remove remaining LaTeX escape characters
     text = text.replace("\\", "")
 
-    # Clean common subscript forms
     text = text.replace("F_Ay", "FAy")
     text = text.replace("F_Dy", "FDy")
     text = text.replace("F_A", "FA")
@@ -351,14 +340,13 @@ def display_visual_solution(solution):
     text = text.replace("F_x", "Fx")
     text = text.replace("F_y", "Fy")
 
-    # Clean extra spaces
     text = " ".join(text.split())
 
     return text.strip()
 
 
 def display_equation(equation):
-    """Display one equation in a clean textbook-style box."""
+    """Display one equation in a clean textbook style."""
 
     equation = clean_equation(equation)
 
@@ -391,10 +379,6 @@ def display_visual_solution(solution):
         st.error(solution["error"])
         return
 
-    # -----------------------------
-    # PROBLEM UNDERSTANDING
-    # -----------------------------
-
     st.markdown("## 📘 Problem Understanding")
 
     understanding = solution.get("problem_understanding", "")
@@ -402,27 +386,15 @@ def display_visual_solution(solution):
     if understanding:
         st.info(understanding)
 
-    # -----------------------------
-    # GIVEN DATA
-    # -----------------------------
-
     st.markdown("## 📌 Given Data")
 
     for item in solution.get("given_data", []):
         st.markdown(f"- **{clean_equation(item)}**")
 
-    # -----------------------------
-    # REQUIRED
-    # -----------------------------
-
     st.markdown("## 🎯 Required")
 
     for item in solution.get("required", []):
         st.markdown(f"- {clean_equation(item)}")
-
-    # -----------------------------
-    # CONCEPT
-    # -----------------------------
 
     st.markdown("## 🧠 Concept Used")
 
@@ -431,28 +403,20 @@ def display_visual_solution(solution):
     if concept:
         st.success(concept)
 
-    # -----------------------------
-    # GOVERNING EQUATIONS
-    # -----------------------------
-
     concept_equations = solution.get("concept_equations", [])
 
     if concept_equations:
-
         st.markdown("### Governing Equations")
 
         for equation in concept_equations:
             display_equation(equation)
 
-    # -----------------------------
-    # SOLUTION
-    # -----------------------------
-
     st.markdown("## ✏️ Solution")
 
-    steps = solution.get("steps", [])
-
-    for number, step in enumerate(steps, start=1):
+    for number, step in enumerate(
+        solution.get("steps", []),
+        start=1
+    ):
 
         title = step.get("title", f"Step {number}")
 
@@ -465,9 +429,7 @@ def display_visual_solution(solution):
         if explanation:
             st.write(explanation)
 
-        equations = step.get("equations", [])
-
-        for equation in equations:
+        for equation in step.get("equations", []):
             display_equation(equation)
 
         result = step.get("result", "")
@@ -477,14 +439,9 @@ def display_visual_solution(solution):
                 f"✅ {clean_equation(result)}"
             )
 
-    # -----------------------------
-    # FINAL ANSWER
-    # -----------------------------
-
     final_answers = solution.get("final_answers", [])
 
     if final_answers:
-
         st.markdown("## 🏁 Final Answer")
 
         for answer in final_answers:
@@ -492,14 +449,9 @@ def display_visual_solution(solution):
                 f"✅ {clean_equation(answer)}"
             )
 
-    # -----------------------------
-    # ENGINEERING CHECK
-    # -----------------------------
-
     checks = solution.get("engineering_check", [])
 
     if checks:
-
         st.markdown("## 🔍 Engineering Check")
 
         for check in checks:
@@ -507,16 +459,10 @@ def display_visual_solution(solution):
                 f"✅ {clean_equation(check)}"
             )
 
-    # -----------------------------
-    # KEY LEARNING POINT
-    # -----------------------------
-
     learning = solution.get("key_learning_point", "")
 
     if learning:
-
         st.markdown("## 💡 Key Learning Point")
-
         st.info(learning)
 # -----------------------------
 # USER INTERFACE
