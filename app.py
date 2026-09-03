@@ -299,6 +299,90 @@ STRICT RULES:
 
 def display_visual_solution(solution):
 
+    def clean_equation(text):
+    """Convert common LaTeX/programming-style notation into clean textbook notation."""
+
+    if not isinstance(text, str):
+        return str(text)
+
+    replacements = {
+        # Math symbols
+        r"\times": " × ",
+        r"\cdot": " × ",
+        r"\div": " ÷ ",
+        r"\sqrt": "√",
+        r"\Sigma": "Σ",
+        r"\theta": "θ",
+        r"\alpha": "α",
+        r"\beta": "β",
+
+        # Functions
+        r"\sin": "sin",
+        r"\cos": "cos",
+        r"\tan": "tan",
+
+        # Common malformed versions sometimes produced by the model
+        "imes": "×",
+        "div": "÷",
+        "Sigma": "Σ",
+
+        # Subscript notation
+        "_{": "",
+        "}": "",
+
+        # Remove LaTeX delimiters
+        "$": "",
+        "`": "",
+    }
+
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+
+    # Remove remaining LaTeX escape characters
+    text = text.replace("\\", "")
+
+    # Clean common subscript forms
+    text = text.replace("F_Ay", "FAy")
+    text = text.replace("F_Dy", "FDy")
+    text = text.replace("F_A", "FA")
+    text = text.replace("F_B", "FB")
+    text = text.replace("F_C", "FC")
+    text = text.replace("F_D", "FD")
+    text = text.replace("F_x", "Fx")
+    text = text.replace("F_y", "Fy")
+
+    # Clean extra spaces
+    text = " ".join(text.split())
+
+    return text.strip()
+
+
+def display_equation(equation):
+    """Display one equation in a clean textbook-style box."""
+
+    equation = clean_equation(equation)
+
+    st.markdown(
+        f"""
+        <div style="
+            text-align: center;
+            font-size: 20px;
+            font-weight: 500;
+            padding: 10px 14px;
+            margin: 7px 0;
+            border-left: 4px solid #888;
+            background-color: rgba(128,128,128,0.06);
+            overflow-x: auto;
+        ">
+            {equation}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def display_visual_solution(solution):
+
     if not isinstance(solution, dict):
         st.error("The image solution could not be displayed.")
         return
@@ -307,98 +391,133 @@ def display_visual_solution(solution):
         st.error(solution["error"])
         return
 
+    # -----------------------------
+    # PROBLEM UNDERSTANDING
+    # -----------------------------
+
     st.markdown("## 📘 Problem Understanding")
-    st.info(solution.get("problem_understanding", ""))
+
+    understanding = solution.get("problem_understanding", "")
+
+    if understanding:
+        st.info(understanding)
+
+    # -----------------------------
+    # GIVEN DATA
+    # -----------------------------
 
     st.markdown("## 📌 Given Data")
+
     for item in solution.get("given_data", []):
-        st.markdown(f"- **{item}**")
+        st.markdown(f"- **{clean_equation(item)}**")
+
+    # -----------------------------
+    # REQUIRED
+    # -----------------------------
 
     st.markdown("## 🎯 Required")
+
     for item in solution.get("required", []):
-        st.markdown(f"- {item}")
+        st.markdown(f"- {clean_equation(item)}")
+
+    # -----------------------------
+    # CONCEPT
+    # -----------------------------
 
     st.markdown("## 🧠 Concept Used")
-    st.success(solution.get("concept", ""))
+
+    concept = solution.get("concept", "")
+
+    if concept:
+        st.success(concept)
+
+    # -----------------------------
+    # GOVERNING EQUATIONS
+    # -----------------------------
 
     concept_equations = solution.get("concept_equations", [])
 
     if concept_equations:
+
         st.markdown("### Governing Equations")
 
         for equation in concept_equations:
-            st.markdown(
-                f"""
-                <div style="
-                    text-align:center;
-                    font-size:22px;
-                    font-weight:600;
-                    padding:8px;
-                    margin:4px 0;
-                ">
-                    {equation}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            display_equation(equation)
+
+    # -----------------------------
+    # SOLUTION
+    # -----------------------------
 
     st.markdown("## ✏️ Solution")
 
-    for number, step in enumerate(solution.get("steps", []), start=1):
+    steps = solution.get("steps", [])
+
+    for number, step in enumerate(steps, start=1):
 
         title = step.get("title", f"Step {number}")
-        st.markdown(f"### Step {number} — {title}")
+
+        st.markdown(
+            f"### Step {number} — {clean_equation(title)}"
+        )
 
         explanation = step.get("explanation", "")
 
         if explanation:
             st.write(explanation)
 
-        for equation in step.get("equations", []):
+        equations = step.get("equations", [])
 
-            st.markdown(
-                f"""
-                <div style="
-                    padding:10px 14px;
-                    margin:7px 0;
-                    border-left:4px solid #888;
-                    font-size:19px;
-                    font-weight:500;
-                    background-color: rgba(128,128,128,0.06);
-                ">
-                    {equation}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        for equation in equations:
+            display_equation(equation)
 
         result = step.get("result", "")
 
         if result:
-            st.success(f"✅ {result}")
+            st.success(
+                f"✅ {clean_equation(result)}"
+            )
+
+    # -----------------------------
+    # FINAL ANSWER
+    # -----------------------------
 
     final_answers = solution.get("final_answers", [])
 
     if final_answers:
+
         st.markdown("## 🏁 Final Answer")
 
         for answer in final_answers:
-            st.success(f"✅ {answer}")
+            st.success(
+                f"✅ {clean_equation(answer)}"
+            )
+
+    # -----------------------------
+    # ENGINEERING CHECK
+    # -----------------------------
 
     checks = solution.get("engineering_check", [])
 
     if checks:
+
         st.markdown("## 🔍 Engineering Check")
 
         for check in checks:
-            st.markdown(f"✅ {check}")
+            st.markdown(
+                f"✅ {clean_equation(check)}"
+            )
+
+    # -----------------------------
+    # KEY LEARNING POINT
+    # -----------------------------
 
     learning = solution.get("key_learning_point", "")
 
     if learning:
-        st.markdown("## 💡 Key Learning Point")
-        st.info(learning)
 
+        st.markdown("## 💡 Key Learning Point")
+
+        st.info(learning)
 # -----------------------------
 # USER INTERFACE
 # -----------------------------
