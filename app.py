@@ -599,98 +599,204 @@ def encode_uploaded_image(uploaded_file):
 
 def solve_mechanics_image(uploaded_file, explanation_level):
 
+  def solve_mechanics_image(uploaded_file, explanation_level):
+
     if uploaded_file is None:
-        return "Please upload a question image."
+        return None
 
     image_data = encode_uploaded_image(uploaded_file)
 
-    level_instruction = {
-        "Beginner": """
-Explain every important step in simple beginner-friendly language.
-Explain why each formula or principle is used.
-""",
-        "Standard": """
-Give a balanced university-level Engineering Mechanics solution.
-""",
-        "Exam": """
-Give a concise university exam-style solution while showing all essential calculations.
-"""
-    }
+    image_prompt = f"""
+You are a professional university Engineering Mechanics professor.
 
-   image_prompt = f"""
-You are an Engineering Mechanics professor.
+Carefully inspect the uploaded Engineering Mechanics problem and solve it
+accurately.
 
-Carefully inspect the uploaded engineering problem and solve it accurately.
+Explanation mode: {explanation_level}
 
-Explanation mode:
-{explanation_level}
+Your tasks:
+
+1. Read the complete problem statement.
+2. Inspect the complete engineering diagram.
+3. Identify all forces, directions, angles, dimensions, supports, and labels.
+4. Determine what is known and what is unknown.
+5. Select the correct Engineering Mechanics principle.
+6. Solve the problem carefully.
+7. Check the final result.
 
 IMPORTANT:
 Return ONLY valid JSON.
 Do not return Markdown.
+Do not return code.
 Do not return code fences.
 Do not return <think>.
 Do not write anything before or after the JSON.
 
-Use this exact structure:
+Use EXACTLY this JSON structure:
 
 {{
-  "problem_understanding": "Maximum 2 short sentences.",
-  "given_data": [
-    "FA = 4 kN",
-    "FC = 2 kN"
-  ],
-  "required": [
-    "Find FB",
-    "Find FD"
-  ],
-  "concept": "Short name of the Engineering Mechanics concept.",
-  "concept_equations": [
-    "ΣFx = 0",
-    "ΣFy = 0"
-  ],
-  "steps": [
-    {{
-      "title": "Find FD using vertical equilibrium",
-      "explanation": "Maximum one short sentence.",
-      "equations": [
-        "ΣFy = 0",
-        "4 sin 60° − FD sin 45° = 0",
-        "3.464 − 0.707FD = 0",
-        "0.707FD = 3.464",
-        "FD = 4.90 kN"
-      ],
-      "result": "FD = 4.90 kN"
-    }}
-  ],
-  "final_answers": [
-    "FD = 4.90 kN",
-    "FB = 3.46 kN"
-  ],
-  "engineering_check": [
-    "Vertical forces balance.",
-    "Horizontal forces balance."
-  ],
-  "key_learning_point": "One short sentence."
+    "problem_understanding": "Maximum 2 short sentences explaining the problem.",
+    
+    "given_data": [
+        "Known quantity 1",
+        "Known quantity 2",
+        "Known quantity 3"
+    ],
+    
+    "required": [
+        "Unknown quantity 1",
+        "Unknown quantity 2"
+    ],
+    
+    "concept": "Short explanation of the Engineering Mechanics concept.",
+    
+    "concept_equations": [
+        "ΣFx = 0",
+        "ΣFy = 0"
+    ],
+    
+    "steps": [
+        {{
+            "title": "Short step title",
+            "explanation": "Maximum 1 or 2 short sentences.",
+            "equations": [
+                "First equation",
+                "Second equation",
+                "Third equation"
+            ],
+            "result": "Final result of this step"
+        }}
+    ],
+    
+    "final_answers": [
+        "Final answer 1",
+        "Final answer 2"
+    ],
+    
+    "engineering_check": [
+        "Short verification statement",
+        "Another short verification statement"
+    ],
+    
+    "key_learning_point": "One short sentence."
 }}
 
-STRICT PRESENTATION RULES:
+STRICT PRESENTATION DATA RULES:
 
-- Each equation must be a separate item.
-- Never combine two equations into one string.
-- Keep explanations very short.
-- Do not use programming notation.
-- Do not use LaTeX.
-- Use × instead of *.
-- Use ÷ instead of /.
-- Use θ instead of theta.
-- Use ° for degrees.
-- Use Σ for summation.
-- Do not invent unreadable information.
-- If something important in the image is unclear, state that clearly.
-- Solve the Engineering Mechanics problem accurately.
+Each equation MUST be a separate item in the equations list.
+
+NEVER combine multiple equations into one string.
+
+BAD:
+"3.464 − 0.707FD = 0  →  FD = 3.464 ÷ 0.707  →  FD = 4.90 kN"
+
+GOOD:
+"3.464 − 0.707FD = 0"
+"0.707FD = 3.464"
+"FD = 3.464 ÷ 0.707"
+"FD = 4.90 kN"
+
+Use normal Engineering Mechanics notation.
+
+Use:
+× instead of *
+÷ instead of /
+θ instead of theta
+° for degrees
+Σ for summation
+√ for square root
+
+Do NOT use programming notation.
+
+Do NOT use LaTeX.
+
+Do NOT use:
+F_x
+F_y
+cos(theta)
+sin(theta)
+500*cos(30)
+
+Use readable textbook notation such as:
+
+Fx = F cos θ
+
+Fy = F sin θ
+
+ΣFx = 0
+
+ΣFy = 0
+
+IMPORTANT IMAGE RULE:
+
+If any important number, angle, force, dimension, label, or direction
+cannot be read clearly from the image, DO NOT GUESS.
+
+Instead mention the unclear information in the response.
+
+ACCURACY RULES:
+
+Carefully check:
+- Force directions
+- Signs
+- Quadrants
+- Sine/cosine relationships
+- Equilibrium equations
+- Arithmetic
+- Units
+- Final direction
+
+For every numerical solution, follow:
+
+Formula
+Substitution
+Calculation
+Result
+
+Keep explanations short.
+
+The student should receive a complete solution, not a wall of text.
 """
 
+    try:
+
+        response = client.chat.completions.create(
+            model="qwen/qwen3.6-27b",
+            reasoning_effort="none",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": image_prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": image_data
+                            }
+                        }
+                    ]
+                }
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.7,
+            max_completion_tokens=4000
+        )
+
+        result = json.loads(
+            response.choices[0].message.content
+        )
+
+        return result
+
+    except Exception as error:
+
+        return {
+            "error": f"An error occurred while reading the image: {error}"
+        }
+        
 def display_visual_solution(solution):
 
     st.markdown("## 📘 Problem Understanding")
