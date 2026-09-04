@@ -219,16 +219,16 @@ Use EXACTLY this structure:
         "Unknown quantity 2"
     ],
 
-    "fbd": {
+    "fbd": {{
         "diagram_type": "particle, beam, truss joint, or other",
         "isolated_body": "Exact body or point label to isolate, copied from the diagram",
-        "axes": {
+        "axes": {{
             "positive_x_angle": 0,
             "positive_y_angle": 90,
             "description": "Short description of chosen axes"
-        },
+        }},
         "forces": [
-            {
+            {{
                 "name": "FA",
                 "label": "FA = 4 kN",
                 "magnitude": 4,
@@ -237,10 +237,10 @@ Use EXACTLY this structure:
                 "type": "applied force",
                 "direction_description": "60° above +x",
                 "confidence": "high"
-            }
+            }}
         ],
         "support_reactions": [
-            {
+            {{
                 "name": "RA",
                 "label": "RA",
                 "magnitude": null,
@@ -249,10 +249,10 @@ Use EXACTLY this structure:
                 "type": "support reaction",
                 "direction_description": "upward",
                 "confidence": "high"
-            }
+            }}
         ],
         "fbd_note": "One short sentence explaining what the student should draw"
-    },
+    }},
 
     "concept": "Short explanation of the Engineering Mechanics concept.",
 
@@ -599,23 +599,52 @@ def display_fbd_analysis(fbd):
 
     if fbd.get("axes"):
         st.markdown("**2. Choose Axes**")
-        st.write(clean_equation(fbd["axes"]))
+        axes = fbd["axes"]
+        if isinstance(axes, dict):
+            description = axes.get("description")
+            if description:
+                st.write(clean_equation(description))
+            x_angle = axes.get("positive_x_angle")
+            y_angle = axes.get("positive_y_angle")
+            if x_angle is not None and y_angle is not None:
+                st.caption(f"+x = {x_angle}° from the reference axis  •  +y = {y_angle}°")
+        else:
+            st.write(clean_equation(axes))
 
     if fbd.get("forces"):
         st.markdown("**3. External Forces**")
         for force in fbd["forces"]:
-            st.write("• " + clean_equation(force))
+            if isinstance(force, dict):
+                label = force.get("label") or force.get("name") or "Force"
+                direction = force.get("direction_description")
+                angle = force.get("angle_from_positive_x")
+                line = clean_equation(label)
+                if direction:
+                    line += " — " + clean_equation(direction)
+                elif angle is not None:
+                    line += f" — {angle}° from +x"
+                st.write("• " + line)
+            else:
+                st.write("• " + clean_equation(force))
 
     if fbd.get("support_reactions"):
-        reactions = [
-            item for item in fbd["support_reactions"]
-            if item and clean_equation(item).lower() not in ["none", "not applicable", "n/a"]
-        ]
+        reactions = []
+        for item in fbd["support_reactions"]:
+            if isinstance(item, dict):
+                label = item.get("label") or item.get("name") or "Reaction"
+                if clean_equation(label).lower() not in ["none", "not applicable", "n/a"]:
+                    direction = item.get("direction_description")
+                    line = clean_equation(label)
+                    if direction:
+                        line += " — " + clean_equation(direction)
+                    reactions.append(line)
+            elif item and clean_equation(item).lower() not in ["none", "not applicable", "n/a"]:
+                reactions.append(clean_equation(item))
 
         if reactions:
             st.markdown("**4. Support Reactions**")
             for reaction in reactions:
-                st.write("• " + clean_equation(reaction))
+                st.write("• " + reaction)
 
     if fbd.get("fbd_note"):
         st.info("✏️ " + clean_equation(fbd["fbd_note"]))
