@@ -1,843 +1,659 @@
+import base64
+import html
+import json
+import math
+import re
+import time
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import streamlit as st
 from groq import Groq
-import base64
-import json
-import html
-import matplotlib.pyplot as plt
 
-# -----------------------------
-# PAGE CONFIGURATION
-# -----------------------------
+# ============================================================
+# ENGINEERING MECHANICS AI TUTOR — FINAL STUDENT RELEASE
+# ============================================================
+# Product goal:
+# A student-facing Engineering Mechanics tutor that converts a typed
+# or photographed question into a clear, exam-ready engineering solution,
+# with structured data, equations, checks, and a deterministic FBD graphic.
+# ============================================================
 
 st.set_page_config(
-    page_title="Engineering Mechanics AI Tutor — V3",
+    page_title="Engineering Mechanics AI Tutor",
     page_icon="🏗️",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed",
 )
 
 # -----------------------------
-# GROQ API KEY
+# THEME / BRANDING
 # -----------------------------
 
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+st.markdown(
+    """
+    <style>
+    .main .block-container {max-width: 980px; padding-top: 1.6rem; padding-bottom: 3rem;}
+    .hero {
+        padding: 1.2rem 1.3rem;
+        border: 1px solid rgba(128,128,128,.22);
+        border-radius: 18px;
+        background: linear-gradient(135deg, rgba(127,127,127,.10), rgba(127,127,127,.03));
+        margin-bottom: 1rem;
+    }
+    .hero h1 {margin: 0 0 .25rem 0; font-size: 2rem;}
+    .hero p {margin: .25rem 0 0 0; opacity: .82;}
+    .badge {
+        display:inline-block; padding:.25rem .55rem; border-radius:999px;
+        border:1px solid rgba(128,128,128,.25); font-size:.78rem; margin-right:.35rem;
+    }
+    .section-card {
+        border: 1px solid rgba(128,128,128,.20);
+        border-radius: 14px;
+        padding: .8rem 1rem;
+        margin: .65rem 0;
+        background: rgba(127,127,127,.045);
+    }
+    .small-muted {opacity:.72; font-size:.88rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    """
+    <div class="hero">
+      <h1>🏗️ Engineering Mechanics AI Tutor</h1>
+      <p>Understand the problem → identify the forces → build the FBD → solve → check.</p>
+      <div style="margin-top:.65rem">
+        <span class="badge">Statics</span>
+        <span class="badge">Step-by-step</span>
+        <span class="badge">FBD</span>
+        <span class="badge">Exam-ready</span>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# -----------------------------
+# API CLIENT
+# -----------------------------
+
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except Exception:
+    st.error("GROQ_API_KEY is not configured. Add it to Streamlit Secrets.")
+    st.stop()
+
 client = Groq(api_key=GROQ_API_KEY)
 
-# -----------------------------
-# SYSTEM PROMPT — TYPED QUESTIONS
-# -----------------------------
-
-SYSTEM_PROMPT = """
-You are a professional university professor of Engineering Mechanics,
-specialized in undergraduate Civil Engineering and Statics.
-
-Your job is to solve Engineering Mechanics numerical problems accurately,
-beginner-friendly, and in a clean university-examination style.
-
-The answer must be student-facing. Never show internal reasoning,
-<think>, code, JSON, code fences, or programming syntax.
-
-Use this structure whenever appropriate:
-
-📘 Problem Understanding
-📌 Given Data
-🎯 Required
-🧠 Concept Used
-✏️ Solution
-🔍 Engineering Check
-🏁 Final Answer
-💡 Key Learning Point
-
-For numerical calculations, follow:
-
-Formula
-Substitution
-Calculation
-Result
-
-Put ONE mathematical step on each line.
-Keep explanations short and clear.
-Use normal textbook notation such as:
-Fx, Fy, FA, FB, FD, ΣFx, ΣFy, θ, α, β, ×, ÷, √, °.
-
-Do not use programming notation such as:
-F_x
-F_y
-cos(theta)
-sin(theta)
-500*cos(30)
-
-Do not use LaTeX commands or dollar signs.
-
-Never invent missing information.
-State assumptions when necessary.
-If a calculated force is negative, explain that the actual direction
-is opposite to the assumed direction.
-
-Always check signs, units, force directions, trigonometry, equilibrium,
-arithmetic, and final direction.
-
-The goal is:
-CLEAR + COMPLETE + CONCISE
-"""
+TEXT_MODEL = "openai/gpt-oss-120b"
+VISION_MODEL = "qwen/qwen3.6-27b"
 
 # -----------------------------
-# TYPED QUESTION SOLVER
+# TEXT CLEANING / FORMATTING
 # -----------------------------
 
-def solve_mechanics_problem(problem, explanation_level):
+_LATEX_REPLACEMENTS = {
+    r"\times": "×",
+    r"\cdot": "×",
+    r"\div": "÷",
+    r"\sqrt": "√",
+    r"\Sigma": "Σ",
+    r"\theta": "θ",
+    r"\alpha": "α",
+    r"\beta": "β",
+    r"\gamma": "γ",
+    r"\sin": "sin",
+    r"\cos": "cos",
+    r"\tan": "tan",
+    r"\pm": "±",
+    r"\geq": "≥",
+    r"\leq": "≤",
+    r"\neq": "≠",
+}
 
-    if not problem.strip():
-        return "Please enter an Engineering Mechanics numerical problem."
 
-    level_instruction = {
-        "Beginner": """
-Explain every important step in simple language.
-Assume the student is still learning the topic.
-Briefly explain why important formulas are selected.
-""",
-        "Standard": """
-Give a balanced university-level solution.
-Explain important reasoning without unnecessary detail.
-""",
-        "Exam": """
-Give a concise exam-style solution.
-Show all essential equations and calculations.
-Keep explanations short.
-"""
-    }
-
-    user_prompt = f"""
-Student explanation mode: {explanation_level}
-
-{level_instruction[explanation_level]}
-
-Problem:
-
-{problem}
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": user_prompt
-                }
-            ],
-            temperature=0.2
-        )
-
-        return response.choices[0].message.content
-
-    except Exception as error:
-        return f"""
-An error occurred while solving the problem.
-
-Please try again.
-
-Technical error:
-{str(error)}
-"""
-
-# -----------------------------
-# IMAGE ENCODING
-# -----------------------------
-
-def encode_uploaded_image(uploaded_file):
-    image_bytes = uploaded_file.getvalue()
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-    mime_type = uploaded_file.type or "image/jpeg"
-    return f"data:{mime_type};base64,{base64_image}"
-
-# -----------------------------
-# IMAGE QUESTION SOLVER — V3
-# -----------------------------
-
-def solve_mechanics_image(uploaded_file, explanation_level):
-
-    if uploaded_file is None:
-        return None
-
-    image_data = encode_uploaded_image(uploaded_file)
-
-    image_prompt = f"""
-You are a professional university professor of Engineering Mechanics,
-specialized in undergraduate Civil Engineering and Statics.
-
-Carefully inspect the uploaded Engineering Mechanics question and diagram.
-
-Explanation mode: {explanation_level}
-
-V3 GOAL:
-Do not only solve the question.
-First understand the mechanics model and build a Free-Body-Diagram analysis.
-
-Your tasks:
-1. Read the complete problem statement.
-2. Inspect the complete engineering diagram.
-3. Detect the most likely Engineering Mechanics topic.
-4. Estimate the difficulty as Beginner, Intermediate, or Advanced.
-5. Identify the body, particle, joint, member, beam, or system that should be isolated.
-6. Identify every external force acting on the isolated body.
-7. Identify support reactions, cable tensions, weights, applied loads, and relevant angles.
-8. State useful x-y axes for the FBD.
-9. Explain the FBD in short student-friendly language.
-10. Determine all known and unknown quantities.
-11. Select the correct Engineering Mechanics principle.
-12. Solve the problem accurately.
-13. Check the final result.
-
-IMPORTANT:
-Return ONLY valid JSON.
-Do not return Markdown.
-Do not return code.
-Do not return code fences.
-Do not return <think>.
-Do not write anything before or after the JSON.
-
-Use EXACTLY this structure:
-
-{{
-    "topic": "Short topic name",
-
-    "difficulty": "Beginner, Intermediate, or Advanced",
-
-    "problem_understanding": "Maximum 2 short sentences explaining the problem.",
-
-    "given_data": [
-        "Known quantity 1",
-        "Known quantity 2"
-    ],
-
-    "required": [
-        "Unknown quantity 1",
-        "Unknown quantity 2"
-    ],
-
-    "fbd": {{
-        "diagram_type": "particle, beam, truss joint, or other",
-        "isolated_body": "Exact body or point label to isolate, copied from the diagram",
-        "axes": {{
-            "positive_x_angle": 0,
-            "positive_y_angle": 90,
-            "description": "Short description of chosen axes"
-        }},
-        "forces": [
-            {{
-                "name": "FA",
-                "label": "FA = 4 kN",
-                "magnitude": 4,
-                "unit": "kN",
-                "angle_from_positive_x": 60,
-                "type": "applied force",
-                "direction_description": "60° above +x",
-                "confidence": "high"
-            }}
-        ],
-        "support_reactions": [
-            {{
-                "name": "RA",
-                "label": "RA",
-                "magnitude": null,
-                "unit": "kN",
-                "angle_from_positive_x": 90,
-                "type": "support reaction",
-                "direction_description": "upward",
-                "confidence": "high"
-            }}
-        ],
-        "fbd_note": "One short sentence explaining what the student should draw"
-    }},
-
-    "concept": "Short explanation of the Engineering Mechanics concept.",
-
-    "concept_equations": [
-        "ΣFx = 0",
-        "ΣFy = 0"
-    ],
-
-    "steps": [
-        {{
-            "title": "Short step title",
-            "explanation": "Maximum 1 or 2 short sentences.",
-            "equations": [
-                "First equation",
-                "Second equation",
-                "Third equation"
-            ],
-            "result": "Final result of this step"
-        }}
-    ],
-
-    "final_answers": [
-        "Final answer 1",
-        "Final answer 2"
-    ],
-
-    "engineering_check": [
-        "Short verification statement",
-        "Another short verification statement"
-    ],
-
-    "key_learning_point": "One short sentence."
-}}
-
-STRICT RULES:
-
-- Never invent a force, angle, support, dimension, or label that is not visible or logically implied.
-- Copy the isolated point/body label exactly from the diagram. Do not substitute a different letter.
-- Determine force direction from the ARROWHEAD in the original diagram, not merely from the member/cable geometry.
-- For every force, return a numeric angle measured counterclockwise from the positive x-axis.
-- Horizontal right = 0°, horizontal left = 180°, vertical up = 90°, vertical down = 270°.
-- 45° above -x = 135°. 45° below +x = 315°.
-- For angled forces, use the correct quadrant and the angle shown in the original diagram.
-- If a direction is genuinely unclear, use null and state that it is unclear. Never guess.
-- Do not use generic or arbitrary arrow directions.
-- For a cable, tension acts along the cable, but still follow the actual force direction shown/required.
-- For weight, use W = mg downward through the center of gravity when applicable.
-- For a pin support, use two reaction components when appropriate.
-- For a roller support, use one reaction normal to the contact surface when appropriate.
-- For the FBD, include only EXTERNAL forces on the isolated body.
-- Each equation must be a separate item in the equations list.
-- Never combine multiple calculation steps into one string.
-- Use one equation per line.
-- Use normal textbook notation.
-- Use × instead of *
-- Use ÷ instead of /
-- Use θ instead of theta
-- Use ° for degrees
-- Use Σ for summation
-- Use √ for square root
-- Do not use LaTeX.
-- Do not use programming notation such as F_x, F_y, cos(theta), sin(theta), or 500*cos(30).
-- Follow Formula → Substitution → Calculation → Result.
-- Keep explanations concise.
-- Make the solution complete enough for a beginner to learn from.
-"""
-
-    try:
-        response = client.chat.completions.create(
-            model="qwen/qwen3.6-27b",
-            reasoning_effort="none",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": image_prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_data
-                            }
-                        }
-                    ]
-                }
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.4,
-            max_completion_tokens=850
-        )
-
-        content = response.choices[0].message.content
-        return json.loads(content)
-
-    except Exception as error:
-        return {
-            "error": f"An error occurred while reading the image: {error}"
-        }
-
-# -----------------------------
-# TEXT CLEANER
-# -----------------------------
-
-def clean_equation(text):
-
-    if text is None:
+def clean_equation(value):
+    if value is None:
         return ""
-
-    text = str(text)
-
-    replacements = {
-        r"\times": "×",
-        r"\cdot": "×",
-        "imes": "×",
-        r"\div": "÷",
-        "div": "÷",
-        r"\sqrt": "√",
-        r"\Sigma": "Σ",
-        "Sigma": "Σ",
-        r"\theta": "θ",
-        r"\alpha": "α",
-        r"\beta": "β",
-        r"\sin": "sin",
-        r"\cos": "cos",
-        r"\tan": "tan",
-        r"\pm": "±",
-        r"\geq": "≥",
-        r"\leq": "≤",
-        r"\neq": "≠",
-        "$": "",
-        "`": "",
-    }
-
-    for old, new in replacements.items():
+    text = str(value)
+    for old, new in _LATEX_REPLACEMENTS.items():
         text = text.replace(old, new)
 
-    text = text.replace("_{", "")
-    text = text.replace("{", "")
-    text = text.replace("}", "")
+    # Common malformed / programming-style output.
+    text = text.replace("imes", "×")
+    text = re.sub(r"\bdiv\b", "÷", text)
+    text = text.replace("Sigma", "Σ")
+    text = text.replace("theta", "θ")
+    text = text.replace("alpha", "α")
+    text = text.replace("beta", "β")
+
+    # Remove math wrappers and simple LaTeX grouping/subscripts.
+    text = text.replace("$", "").replace("`", "")
+    text = text.replace("_{", "").replace("^ {", "")
+    text = text.replace("{", "").replace("}", "")
     text = text.replace("\\", "")
 
-    text = text.replace("F_Ay", "FAy")
-    text = text.replace("F_Dy", "FDy")
-    text = text.replace("F_A", "FA")
-    text = text.replace("F_B", "FB")
-    text = text.replace("F_C", "FC")
-    text = text.replace("F_D", "FD")
-    text = text.replace("F_x", "Fx")
-    text = text.replace("F_y", "Fy")
+    # Engineering notation: F_Ay -> FAy, M_O -> MO, etc.
+    text = re.sub(r"\b([A-Za-z])_([A-Za-z])([A-Za-z0-9]*)\b", r"\1\2\3", text)
+    text = re.sub(r"\b([A-Za-z])_([A-Za-z0-9]+)\b", r"\1\2", text)
 
     return " ".join(text.split())
 
-# -----------------------------
-# EQUATION DISPLAY
-# -----------------------------
 
 def display_equation(equation):
-
-    equation = html.escape(clean_equation(equation))
-
+    eq = html.escape(clean_equation(equation))
+    if not eq:
+        return
     st.markdown(
         f"""
-        <div style="
-            text-align:center;
-            font-size:20px;
-            font-weight:500;
-            padding:12px 16px;
-            margin:8px 0;
-            background-color:rgba(255,255,255,0.06);
-            color:inherit;
-            border:1px solid rgba(255,255,255,0.15);
-            border-radius:8px;
-        ">
-            {equation}
+        <div style="text-align:center;font-size:1.08rem;font-weight:600;
+                    padding:.7rem .8rem;margin:.45rem 0;
+                    background:rgba(127,127,127,.08);
+                    border:1px solid rgba(127,127,127,.22);
+                    border-radius:10px;overflow-x:auto;">
+            {eq}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
+
+def safe_json_loads(raw):
+    if not raw:
+        raise ValueError("The model returned an empty response.")
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+        text = re.sub(r"\s*```$", "", text)
+    return json.loads(text)
+
 # -----------------------------
-# AUTOMATIC FBD RENDERER — V3.2.1
+# TEXT SOLVER
 # -----------------------------
 
-def render_fbd_diagram(fbd):
-    """Render the FBD using AI-detected force directions."""
+TEXT_SYSTEM_PROMPT = """
+You are a university Engineering Mechanics professor for Civil Engineering students.
+Solve only the student's mechanics problem.
 
-    if not fbd:
+Student-facing rules:
+- Never show hidden reasoning, chain-of-thought, code, JSON, <think>, or markdown code fences.
+- Be accurate, concise, beginner-friendly, and exam-ready.
+- Use these headings when relevant: Problem Understanding, Given Data, Required,
+  Concept Used, Solution, Engineering Check, Final Answer, Key Learning Point.
+- One equation/calculation step per line.
+- Use textbook notation: ΣFx, ΣFy, ΣMO, FA, FB, θ, ×, ÷, √, °.
+- Do not use LaTeX commands or programming notation.
+- State assumptions clearly; never invent missing data.
+- Check signs, units, direction, trigonometry, equilibrium, and arithmetic.
+"""
+
+
+def solve_typed_problem(problem, level):
+    level_text = {
+        "Beginner": "Explain the main idea simply and show all essential calculation steps.",
+        "Standard": "Use a balanced university-level explanation with essential steps.",
+        "Exam": "Use concise exam-style working while keeping every essential equation and result.",
+    }[level]
+
+    prompt = f"""
+Explanation level: {level}
+Style instruction: {level_text}
+
+Problem:
+{problem.strip()}
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model=TEXT_MODEL,
+            messages=[
+                {"role": "system", "content": TEXT_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+            max_completion_tokens=1400,
+        )
+        return response.choices[0].message.content
+    except Exception as exc:
+        return f"Unable to solve this problem right now.\n\nError: {exc}"
+
+# -----------------------------
+# VISION / STRUCTURED SOLVER
+# -----------------------------
+
+VISION_PROMPT = """
+You are a university Engineering Mechanics professor and engineering-diagram analyst.
+Analyze the uploaded mechanics question and produce a compact, accurate student solution.
+
+CRITICAL DIAGRAM RULES:
+1. Identify the actual isolated body/point from the original image. Copy its label exactly when readable.
+2. Read arrowheads, not just member/cable orientation, to determine force direction.
+3. Do not invent unclear values, labels, angles, supports, or forces.
+4. For each force, give angle_deg measured counterclockwise from +x:
+   right=0, up=90, left=180, down=270.
+5. Example: 60° above +x = 60; 45° below +x = 315.
+6. Cable tension acts along its cable toward the cable connection.
+7. Weight acts downward when a weight is present.
+8. Include only external forces on the isolated body.
+9. For a particle/knot FBD, all force arrows start at the isolated point.
+10. If a direction cannot be determined confidently from the image, set angle_deg to null and explain it briefly.
+11. Do not claim an automatic FBD is reliable when required direction data is missing.
+
+OUTPUT:
+Return ONLY valid JSON. No markdown. No code fences. No <think>.
+Keep the JSON compact enough to stay below a strict 1000 output-token/minute limit.
+Use at most 4 solution steps and short strings.
+
+Exact schema:
+{
+  "topic":"short topic",
+  "difficulty":"Beginner|Intermediate|Advanced",
+  "problem_understanding":"max 2 short sentences",
+  "given_data":["item"],
+  "required":["item"],
+  "fbd":{
+    "applicable":true,
+    "isolated_body":"short description",
+    "isolated_label":"O",
+    "axes_note":"+x right, +y up",
+    "forces":[
+      {"label":"FA","magnitude":"4","unit":"kN","angle_deg":60,"direction_text":"60° above +x","known":true}
+    ],
+    "support_reactions":[],
+    "confidence":"high|medium|low",
+    "fbd_note":"short note"
+  },
+  "concept":"short concept",
+  "concept_equations":["ΣFx = 0","ΣFy = 0"],
+  "steps":[
+    {"title":"short title","explanation":"max 1 short sentence","equations":["one equation"],"result":"short result"}
+  ],
+  "final_answers":["short answer"],
+  "engineering_check":["short check"],
+  "key_learning_point":"one short sentence"
+}
+
+FORMAT RULES:
+- One equation per equations-list item.
+- Use ×, ÷, Σ, √, θ, °.
+- Never output LaTeX.
+- Never output F_x, F_{Ay}, cos(theta), 500*cos(30), or similar programming notation.
+- If a force is unknown, leave magnitude empty and known=false.
+"""
+
+
+def encode_image(uploaded_file):
+    data = base64.b64encode(uploaded_file.getvalue()).decode("utf-8")
+    mime = uploaded_file.type or "image/jpeg"
+    return f"data:{mime};base64,{data}"
+
+
+def solve_image_problem(uploaded_file, level):
+    image_url = encode_image(uploaded_file)
+    prompt = VISION_PROMPT + f"\nExplanation level: {level}"
+
+    # The account currently reports a 1000-token output/minute limit.
+    # Two safe ceilings are used; retry only on likely token/rate errors.
+    for budget in (800, 700):
+        try:
+            response = client.chat.completions.create(
+                model=VISION_MODEL,
+                reasoning_effort="none",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.15,
+                max_completion_tokens=budget,
+            )
+            return safe_json_loads(response.choices[0].message.content)
+        except Exception as exc:
+            message = str(exc).lower()
+            if any(token in message for token in ("429", "rate_limit", "output tokens", "tokens per minute")):
+                time.sleep(1)
+                continue
+            return {"error": f"Image analysis failed: {exc}"}
+
+    return {
+        "error": (
+            "The image solver is temporarily limited by the AI service's output-token quota. "
+            "Please try again shortly."
+        )
+    }
+
+# -----------------------------
+# FBD GRAPHICS
+# -----------------------------
+
+def angle_number(value):
+    try:
+        if value is None or value == "":
+            return None
+        return float(value) % 360
+    except (TypeError, ValueError):
         return None
 
-    forces = []
 
-    for item in fbd.get("forces", []):
-        if isinstance(item, dict):
-            forces.append(item)
+def compact_force_label(force):
+    label = clean_equation(force.get("label", "F"))
+    magnitude = clean_equation(force.get("magnitude", ""))
+    unit = clean_equation(force.get("unit", ""))
+    if magnitude:
+        return f"{label} = {magnitude} {unit}".strip()
+    return label
 
-    for item in fbd.get("support_reactions", []):
-        if isinstance(item, dict):
-            forces.append(item)
 
-    if not forces:
+def fbd_vectors(fbd):
+    vectors = []
+    if not isinstance(fbd, dict):
+        return vectors
+
+    for group in ("forces", "support_reactions"):
+        items = fbd.get(group, [])
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            angle = angle_number(item.get("angle_deg"))
+            if angle is None:
+                continue
+            vectors.append(
+                {
+                    "label": compact_force_label(item),
+                    "angle": angle,
+                    "direction": clean_equation(item.get("direction_text", "")),
+                }
+            )
+    return vectors
+
+
+def render_fbd(fbd):
+    if not isinstance(fbd, dict) or not fbd.get("applicable", True):
         return None
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(-1.45, 1.45)
-    ax.set_ylim(-1.45, 1.45)
+    vectors = fbd_vectors(fbd)
+    if not vectors:
+        return None
+
+    fig, ax = plt.subplots(figsize=(8.4, 6.2))
     ax.set_aspect("equal")
+    ax.set_xlim(-1.65, 1.65)
+    ax.set_ylim(-1.45, 1.45)
     ax.axis("off")
 
-    body = clean_equation(fbd.get("isolated_body", "O")) or "O"
+    isolated = clean_equation(fbd.get("isolated_label", "")) or "O"
+    body = clean_equation(fbd.get("isolated_body", ""))
 
-    # Isolated particle
-    ax.scatter([0], [0], s=260, zorder=5)
-    ax.text(
-        0, -0.20, body,
-        ha="center", va="top",
-        fontsize=13, fontweight="bold"
-    )
+    # Particle / joint.
+    ax.scatter([0], [0], s=240, zorder=5)
+    ax.text(0, -0.16, isolated, ha="center", va="top", fontsize=12, fontweight="bold")
 
-    def unit_vector(angle):
-        import math
-        rad = math.radians(float(angle))
-        return math.cos(rad), math.sin(rad)
+    # +x / +y reference axes.
+    ox, oy = 0.72, -1.02
+    ax.annotate("", xy=(1.32, oy), xytext=(ox, oy), arrowprops=dict(arrowstyle="->", linewidth=1.4))
+    ax.text(1.38, oy, "+x", va="center", fontsize=10)
+    ax.annotate("", xy=(ox, -0.40), xytext=(ox, oy), arrowprops=dict(arrowstyle="->", linewidth=1.4))
+    ax.text(ox, -0.32, "+y", ha="center", fontsize=10)
 
-    axes = fbd.get("axes", {})
-    x_angle = axes.get("positive_x_angle", 0)
-    y_angle = axes.get("positive_y_angle", 90)
+    # Draw up to 8 forces using their actual extracted angles.
+    for force in vectors[:8]:
+        angle = math.radians(force["angle"])
+        dx, dy = math.cos(angle), math.sin(angle)
+        length = 0.94
+        sx, sy = 0.10 * dx, 0.10 * dy
+        ex, ey = length * dx, length * dy
 
-    ux, uy = unit_vector(x_angle)
-    vx, vy = unit_vector(y_angle)
-
-    # Axes
-    ax.annotate(
-        "", xy=(ux * 0.65, uy * 0.65),
-        xytext=(ux * 0.10, uy * 0.10),
-        arrowprops=dict(arrowstyle="->", linewidth=1.3)
-    )
-    ax.text(ux * 0.78, uy * 0.78, "+x", fontsize=10)
-
-    ax.annotate(
-        "", xy=(vx * 0.65, vy * 0.65),
-        xytext=(vx * 0.10, vy * 0.10),
-        arrowprops=dict(arrowstyle="->", linewidth=1.3)
-    )
-    ax.text(vx * 0.78, vy * 0.78, "+y", fontsize=10)
-
-    import math
-
-    for force in forces[:8]:
-
-        angle = force.get("angle_from_positive_x")
-
-        if angle is None:
-            continue
-
-        try:
-            angle = float(angle)
-        except (TypeError, ValueError):
-            continue
-
-        rad = math.radians(angle)
-        dx = math.cos(rad)
-        dy = math.sin(rad)
-
-        # Force arrow starts at the isolated point and follows the
-        # direction reported by the vision model.
         ax.annotate(
             "",
-            xy=(dx * 0.98, dy * 0.98),
-            xytext=(dx * 0.08, dy * 0.08),
-            arrowprops=dict(
-                arrowstyle="->",
-                linewidth=2.5
-            )
+            xy=(ex, ey),
+            xytext=(sx, sy),
+            arrowprops=dict(arrowstyle="->", linewidth=2.2),
         )
 
-        label = force.get("label") or force.get("name") or "Force"
-        label = clean_equation(label)
-
-        if len(label) > 30:
-            label = label[:27] + "..."
-
-        # Slight radial offset keeps labels away from arrowheads.
-        ax.text(
-            dx * 1.13,
-            dy * 1.13,
-            label,
-            ha="center",
-            va="center",
-            fontsize=10,
-            fontweight="bold"
-        )
+        radius = 1.13
+        lx, ly = radius * dx, radius * dy
+        ha = "left" if lx > 0.15 else "right" if lx < -0.15 else "center"
+        va = "bottom" if ly > 0.15 else "top" if ly < -0.15 else "center"
+        ax.text(lx, ly, force["label"], ha=ha, va=va, fontsize=9.5, fontweight="bold")
 
     ax.set_title(
-        f"Free-Body Diagram — {body}",
-        fontsize=15,
+        f"Free-Body Diagram — {isolated}",
+        fontsize=14,
         fontweight="bold",
-        pad=12
+        pad=10,
     )
+    if body and body.lower() != isolated.lower():
+        ax.text(0, 1.27, body, ha="center", va="center", fontsize=9)
 
     fig.tight_layout()
     return fig
 
 
-def display_fbd_diagram(fbd):
-
-    if not fbd:
+def display_fbd(fbd):
+    if not isinstance(fbd, dict):
         return
 
-    st.markdown("### 📐 Automatic Free-Body Diagram")
+    st.markdown("### 📐 Free-Body Diagram")
 
-    fig = render_fbd_diagram(fbd)
+    confidence = clean_equation(fbd.get("confidence", ""))
+    vectors = fbd_vectors(fbd)
 
-    if fig is None:
-        st.warning(
-            "The AI could not determine enough force directions to safely draw the FBD."
-        )
-        return
-
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
-
-    st.caption(
-        "The diagram uses the force directions detected from the original question. "
-        "Always compare it with the source diagram."
-    )
-
-
-# -----------------------------
-# FBD INTELLIGENCE DISPLAY — V3
-# -----------------------------
-
-def display_fbd_analysis(fbd):
-
-    if not fbd:
-        return
-
-    st.markdown("### 🧩 Free-Body Diagram Analysis")
-
-    if fbd.get("isolated_body"):
-        st.markdown("**1. Isolate**")
-        st.write(clean_equation(fbd["isolated_body"]))
-
-    if fbd.get("axes"):
-        st.markdown("**2. Choose Axes**")
-        axes = fbd["axes"]
-        if isinstance(axes, dict):
-            description = axes.get("description")
-            if description:
-                st.write(clean_equation(description))
-            x_angle = axes.get("positive_x_angle")
-            y_angle = axes.get("positive_y_angle")
-            if x_angle is not None and y_angle is not None:
-                st.caption(f"+x = {x_angle}° from the reference axis  •  +y = {y_angle}°")
-        else:
-            st.write(clean_equation(axes))
-
-    if fbd.get("forces"):
-        st.markdown("**3. External Forces**")
-        for force in fbd["forces"]:
-            if isinstance(force, dict):
-                label = force.get("label") or force.get("name") or "Force"
-                direction = force.get("direction_description")
-                angle = force.get("angle_from_positive_x")
-                line = clean_equation(label)
-                if direction:
-                    line += " — " + clean_equation(direction)
-                elif angle is not None:
-                    line += f" — {angle}° from +x"
-                st.write("• " + line)
-            else:
-                st.write("• " + clean_equation(force))
-
-    if fbd.get("support_reactions"):
-        reactions = []
-        for item in fbd["support_reactions"]:
-            if isinstance(item, dict):
-                label = item.get("label") or item.get("name") or "Reaction"
-                if clean_equation(label).lower() not in ["none", "not applicable", "n/a"]:
-                    direction = item.get("direction_description")
-                    line = clean_equation(label)
-                    if direction:
-                        line += " — " + clean_equation(direction)
-                    reactions.append(line)
-            elif item and clean_equation(item).lower() not in ["none", "not applicable", "n/a"]:
-                reactions.append(clean_equation(item))
-
-        if reactions:
-            st.markdown("**4. Support Reactions**")
-            for reaction in reactions:
-                st.write("• " + reaction)
-
-    if fbd.get("fbd_note"):
-        st.info("✏️ " + clean_equation(fbd["fbd_note"]))
-
-# -----------------------------
-# VISUAL IMAGE SOLUTION — V3
-# -----------------------------
-
-def display_visual_solution(solution):
-
-    if not solution:
-        st.error("No solution was generated.")
-        return
-
-    if solution.get("error"):
-        st.error(solution["error"])
-        return
-
-    # V3 quick classification
-    topic = clean_equation(solution.get("topic", "Engineering Mechanics"))
-    difficulty = clean_equation(solution.get("difficulty", ""))
-
-    if difficulty:
-        st.caption(f"Detected topic: {topic}  •  Difficulty: {difficulty}")
+    # Only show a graphical FBD when the required direction data exists.
+    if vectors and confidence.lower() != "low":
+        fig = render_fbd(fbd)
+        if fig is not None:
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+            st.caption("The diagram is generated from the force directions extracted from the uploaded figure.")
     else:
-        st.caption(f"Detected topic: {topic}")
+        st.info("A reliable automatic FBD could not be drawn from the detected geometry, so the force analysis is shown below instead.")
 
-    if solution.get("problem_understanding"):
+    isolated_body = clean_equation(fbd.get("isolated_body", ""))
+    if isolated_body:
+        st.markdown(f"**Isolate:** {isolated_body}")
+
+    axes = clean_equation(fbd.get("axes_note", ""))
+    if axes:
+        st.markdown(f"**Axes:** {axes}")
+
+    forces = fbd.get("forces", [])
+    if isinstance(forces, list) and forces:
+        st.markdown("**External Forces**")
+        for force in forces:
+            if not isinstance(force, dict):
+                continue
+            line = compact_force_label(force)
+            direction = clean_equation(force.get("direction_text", ""))
+            angle = angle_number(force.get("angle_deg"))
+            if direction:
+                line += f" — {direction}"
+            if angle is not None:
+                line += f" ({angle:.0f}° from +x)"
+            st.write("• " + line)
+
+    reactions = fbd.get("support_reactions", [])
+    if isinstance(reactions, list) and reactions:
+        st.markdown("**Support Reactions**")
+        for reaction in reactions:
+            if not isinstance(reaction, dict):
+                continue
+            line = compact_force_label(reaction)
+            direction = clean_equation(reaction.get("direction_text", ""))
+            angle = angle_number(reaction.get("angle_deg"))
+            if direction:
+                line += f" — {direction}"
+            if angle is not None:
+                line += f" ({angle:.0f}° from +x)"
+            st.write("• " + line)
+
+    note = clean_equation(fbd.get("fbd_note", ""))
+    if note:
+        st.caption("✏️ " + note)
+
+# -----------------------------
+# STRUCTURED SOLUTION DISPLAY
+# -----------------------------
+
+def display_solution(data):
+    if not isinstance(data, dict):
+        st.error("No usable solution was returned.")
+        return
+    if data.get("error"):
+        st.error(data["error"])
+        return
+
+    topic = clean_equation(data.get("topic", "Engineering Mechanics"))
+    difficulty = clean_equation(data.get("difficulty", ""))
+    st.caption(" • ".join(x for x in (topic, difficulty) if x))
+
+    if data.get("problem_understanding"):
         st.markdown("### 📘 Problem Understanding")
-        st.write(clean_equation(solution["problem_understanding"]))
+        st.write(clean_equation(data["problem_understanding"]))
 
-    if solution.get("given_data"):
+    if data.get("given_data"):
         st.markdown("### 📌 Given Data")
-        for item in solution["given_data"]:
+        for item in data["given_data"]:
             st.write("• " + clean_equation(item))
 
-    if solution.get("required"):
+    if data.get("required"):
         st.markdown("### 🎯 Required")
-        required = solution["required"]
+        required = data["required"] if isinstance(data["required"], list) else [data["required"]]
+        for item in required:
+            st.write("• " + clean_equation(item))
 
-        if isinstance(required, list):
-            for item in required:
-                st.write("• " + clean_equation(item))
-        else:
-            st.write(clean_equation(required))
+    display_fbd(data.get("fbd"))
 
-    # V3.2.1 flagship feature: geometry-aware generated FBD
-    display_fbd_diagram(solution.get("fbd"))
-
-    # Keep textual FBD analysis for transparency and learning
-    display_fbd_analysis(solution.get("fbd"))
-
-    if solution.get("concept"):
+    if data.get("concept"):
         st.markdown("### 🧠 Concept Used")
-        st.write(clean_equation(solution["concept"]))
+        st.write(clean_equation(data["concept"]))
 
-    if solution.get("concept_equations"):
-        for equation in solution["concept_equations"]:
+    equations = data.get("concept_equations", [])
+    if isinstance(equations, list):
+        for equation in equations:
             display_equation(equation)
 
-    if solution.get("steps"):
+    steps = data.get("steps", [])
+    if isinstance(steps, list) and steps:
         st.markdown("### ✏️ Solution")
-
-        for step in solution["steps"]:
-
-            if step.get("title"):
-                st.markdown(f"#### {clean_equation(step['title'])}")
-
-            if step.get("explanation"):
-                st.write(clean_equation(step["explanation"]))
-
-            if step.get("equations"):
-                for equation in step["equations"]:
+        for number, step in enumerate(steps, start=1):
+            if not isinstance(step, dict):
+                continue
+            title = clean_equation(step.get("title", "")) or f"Step {number}"
+            st.markdown(f"#### {number}. {title}")
+            explanation = clean_equation(step.get("explanation", ""))
+            if explanation:
+                st.write(explanation)
+            eqs = step.get("equations", [])
+            if isinstance(eqs, list):
+                for equation in eqs:
                     display_equation(equation)
+            result = clean_equation(step.get("result", ""))
+            if result:
+                st.success("✅ " + result)
 
-            if step.get("result"):
-                st.markdown(f"**✅ {clean_equation(step['result'])}**")
-
-    if solution.get("engineering_check"):
+    checks = data.get("engineering_check", [])
+    if checks:
         st.markdown("### 🔍 Engineering Check")
+        checks = checks if isinstance(checks, list) else [checks]
+        for check in checks:
+            st.write("✅ " + clean_equation(check))
 
-        checks = solution["engineering_check"]
-
-        if isinstance(checks, list):
-            for check in checks:
-                st.write("✅ " + clean_equation(check))
-        else:
-            st.write("✅ " + clean_equation(checks))
-
-    if solution.get("final_answers"):
+    answers = data.get("final_answers", [])
+    if answers:
         st.markdown("### 🏁 Final Answer")
+        answers = answers if isinstance(answers, list) else [answers]
+        for answer in answers:
+            st.success(clean_equation(answer))
 
-        answers = solution["final_answers"]
-
-        if isinstance(answers, list):
-            for answer in answers:
-                st.success(clean_equation(answer))
-        else:
-            st.success(clean_equation(answers))
-
-    if solution.get("key_learning_point"):
+    learning = clean_equation(data.get("key_learning_point", ""))
+    if learning:
         st.markdown("### 💡 Key Learning Point")
-        st.info(clean_equation(solution["key_learning_point"]))
+        st.info(learning)
 
 # -----------------------------
-# USER INTERFACE
+# UI
 # -----------------------------
 
-st.title("🏗️ Engineering Mechanics AI Tutor")
+with st.sidebar:
+    st.markdown("## 🎓 Student Settings")
+    level = st.radio("Explanation level", ["Beginner", "Standard", "Exam"], index=0)
+    st.markdown("### What this tutor does")
+    st.write("• Understands statics problems")
+    st.write("• Extracts force directions from photos")
+    st.write("• Builds a deterministic FBD graphic when reliable")
+    st.write("• Solves step-by-step")
+    st.write("• Checks units and equilibrium")
+    st.caption("Always verify engineering results against your textbook, instructor, or original diagram.")
 
-st.write(
-    "Type an Engineering Mechanics problem or upload a question photo "
-    "for a step-by-step solution."
-)
-
-st.caption("V3.2.1 — Geometry-Aware Free-Body Diagram")
-
-explanation_level = st.radio(
-    "Explanation Level",
+level = st.radio(
+    "How should the solution be explained?",
     ["Beginner", "Standard", "Exam"],
-    horizontal=True
+    horizontal=True,
+    index=0,
 )
 
-problem = st.text_area(
-    "Enter your numerical problem",
-    height=220,
-    placeholder="""Example:
-
-A simply supported beam AB has a span of 6 m.
-A point load of 12 kN acts 2 m from support A.
-
-Find the reactions at supports A and B.
-"""
+input_mode = st.radio(
+    "Choose input",
+    ["Type a question", "Upload a question photo"],
+    horizontal=True,
 )
 
-st.write("### Or upload a question photo")
+problem = ""
+uploaded_image = None
 
-uploaded_image = st.file_uploader(
-    "Upload an Engineering Mechanics question",
-    type=["jpg", "jpeg", "png"]
-)
-
-if uploaded_image is not None:
-    st.image(
-        uploaded_image,
-        caption="Uploaded Question",
-        use_container_width=True
+if input_mode == "Type a question":
+    problem = st.text_area(
+        "Engineering Mechanics problem",
+        height=190,
+        placeholder=(
+            "Example: A particle is acted on by three concurrent forces. "
+            "Find the unknown force required for equilibrium."
+        ),
     )
+else:
+    uploaded_image = st.file_uploader(
+        "Upload a clear Engineering Mechanics question",
+        type=["jpg", "jpeg", "png"],
+        help="Crop the question so the diagram, labels, angles, and values are easy to read.",
+    )
+    if uploaded_image is not None:
+        st.image(uploaded_image, caption="Question image", use_container_width=True)
 
-# -----------------------------
-# SOLVE BUTTON
-# -----------------------------
+st.markdown("<div class='small-muted'>Tip: For diagram questions, include the full figure and all labels in the photo.</div>", unsafe_allow_html=True)
 
-if st.button(
-    "Solve Problem",
-    type="primary",
-    use_container_width=True
-):
+solve_clicked = st.button("🚀 Solve Problem", type="primary", use_container_width=True)
 
-    if not problem.strip() and uploaded_image is None:
-
-        st.warning(
-            "Please type a problem or upload a question photo."
-        )
-
+if solve_clicked:
+    if input_mode == "Type a question":
+        if not problem.strip():
+            st.warning("Please enter an Engineering Mechanics problem.")
+        else:
+            with st.spinner("Solving and checking the mechanics..."):
+                answer = solve_typed_problem(problem, level)
+            st.divider()
+            st.markdown("## ✏️ Solution")
+            st.markdown(answer)
     else:
-
-        with st.spinner("Analyzing mechanics model and solving..."):
-
-            if uploaded_image is not None:
-
-                solution = solve_mechanics_image(
-                    uploaded_image,
-                    explanation_level
-                )
-
-                st.divider()
-                display_visual_solution(solution)
-
-            else:
-
-                solution = solve_mechanics_problem(
-                    problem,
-                    explanation_level
-                )
-
-                st.divider()
-                st.subheader("✏️ Solution")
-                st.markdown(solution)
-
-# -----------------------------
-# FOOTER
-# -----------------------------
+        if uploaded_image is None:
+            st.warning("Please upload a question image.")
+        else:
+            with st.spinner("Reading the diagram, identifying forces, and solving..."):
+                answer = solve_image_problem(uploaded_image, level)
+            st.divider()
+            display_solution(answer)
 
 st.divider()
-st.caption("Engineering Mechanics AI Tutor — V3.2.1")
+st.markdown(
+    "<div style='text-align:center;opacity:.65;font-size:.82rem'>Engineering Mechanics AI Tutor • Student Edition</div>",
+    unsafe_allow_html=True,
+)
