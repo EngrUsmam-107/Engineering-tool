@@ -343,7 +343,7 @@ STRICT RULES:
             ],
             response_format={"type": "json_object"},
             temperature=0.4,
-            max_completion_tokens=4000
+            max_completion_tokens=850
         )
 
         content = response.choices[0].message.content
