@@ -3,6 +3,7 @@ from groq import Groq
 import base64
 import json
 import html
+import matplotlib.pyplot as plt
 
 # -----------------------------
 # PAGE CONFIGURATION
@@ -407,6 +408,160 @@ def display_equation(equation):
     )
 
 # -----------------------------
+# AUTOMATIC FBD RENDERER — V3.2
+# -----------------------------
+
+def render_fbd_diagram(fbd):
+    """
+    Render a simple engineering-style Free-Body Diagram from the
+    structured FBD information returned by the vision model.
+
+    This first V3.2 renderer is designed for particle / knot problems.
+    """
+
+    if not fbd:
+        return None
+
+    forces = fbd.get("forces", [])
+    reactions = fbd.get("support_reactions", [])
+
+    # Combine force/reaction descriptions for rendering
+    items = []
+    for item in forces:
+        if item:
+            items.append(clean_equation(item))
+
+    for item in reactions:
+        if item:
+            cleaned = clean_equation(item)
+            if cleaned.lower() not in ["none", "not applicable", "n/a"]:
+                items.append(cleaned)
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    # Coordinate system
+    ax.set_xlim(-1.6, 1.6)
+    ax.set_ylim(-1.35, 1.35)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # Central particle / knot
+    ax.scatter([0], [0], s=280, zorder=5)
+    ax.text(
+        0,
+        -0.18,
+        "E",
+        ha="center",
+        va="top",
+        fontsize=13,
+        fontweight="bold"
+    )
+
+    # Draw coordinate axes
+    ax.annotate(
+        "",
+        xy=(1.25, -1.0),
+        xytext=(0.55, -1.0),
+        arrowprops=dict(arrowstyle="->", linewidth=1.5)
+    )
+    ax.text(1.32, -1.0, "+x", va="center", fontsize=11)
+
+    ax.annotate(
+        "",
+        xy=(0.55, -0.25),
+        xytext=(0.55, -1.0),
+        arrowprops=dict(arrowstyle="->", linewidth=1.5)
+    )
+    ax.text(0.55, -0.15, "+y", ha="center", fontsize=11)
+
+    # Default force directions.
+    # These are intentionally simple and deterministic for V3.2.1.
+    # The AI's detailed FBD analysis remains visible below the diagram.
+    directions = [
+        (1.0, 0.75),
+        (-0.9, 0.75),
+        (1.0, -0.65),
+        (-1.0, -0.65),
+        (0.0, -1.0),
+        (0.0, 1.0),
+    ]
+
+    label_positions = [
+        (1.08, 0.82),
+        (-1.08, 0.82),
+        (1.08, -0.72),
+        (-1.08, -0.72),
+        (0.12, -1.12),
+        (0.12, 1.10),
+    ]
+
+    for i, item in enumerate(items[:6]):
+        dx, dy = directions[i]
+        lx, ly = label_positions[i]
+
+        ax.annotate(
+            "",
+            xy=(dx * 0.92, dy * 0.92),
+            xytext=(dx * 0.12, dy * 0.12),
+            arrowprops=dict(
+                arrowstyle="->",
+                linewidth=2
+            )
+        )
+
+        # Keep labels compact so the diagram remains readable
+        label = item
+        if len(label) > 42:
+            label = label[:39] + "..."
+
+        ax.text(
+            lx,
+            ly,
+            label,
+            ha="center",
+            va="center",
+            fontsize=9
+        )
+
+    title = "Free-Body Diagram"
+    isolated = clean_equation(fbd.get("isolated_body", ""))
+
+    if isolated:
+        title += f" — {isolated}"
+
+    ax.set_title(
+        title,
+        fontsize=14,
+        fontweight="bold",
+        pad=12
+    )
+
+    fig.tight_layout()
+    return fig
+
+
+def display_fbd_diagram(fbd):
+    """Display the generated V3.2 FBD diagram."""
+
+    if not fbd:
+        return
+
+    st.markdown("### 📐 Automatic Free-Body Diagram")
+
+    fig = render_fbd_diagram(fbd)
+
+    if fig is not None:
+        st.pyplot(fig, use_container_width=True)
+        plt.close(fig)
+
+    st.caption(
+        "V3.2 generated this diagram from the AI's detected force information. "
+        "Always compare it with the original question before using it in an exam."
+    )
+
+
+# -----------------------------
 # FBD INTELLIGENCE DISPLAY — V3
 # -----------------------------
 
@@ -486,7 +641,10 @@ def display_visual_solution(solution):
         else:
             st.write(clean_equation(required))
 
-    # V3 flagship feature
+    # V3.2 flagship feature: actual generated FBD
+    display_fbd_diagram(solution.get("fbd"))
+
+    # Keep the textual FBD analysis for transparency and learning
     display_fbd_analysis(solution.get("fbd"))
 
     if solution.get("concept"):
@@ -552,7 +710,7 @@ st.write(
     "for a step-by-step solution."
 )
 
-st.caption("V3 — Statics Tutor + Free-Body Diagram Intelligence")
+st.caption("V3.2 — Statics Tutor + Automatic Free-Body Diagram")
 
 explanation_level = st.radio(
     "Explanation Level",
@@ -632,4 +790,4 @@ if st.button(
 # -----------------------------
 
 st.divider()
-st.caption("Engineering Mechanics AI Tutor — V3")
+st.caption("Engineering Mechanics AI Tutor — V3.2")
