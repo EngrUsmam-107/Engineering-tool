@@ -2,13 +2,14 @@ import streamlit as st
 from groq import Groq
 import base64
 import json
+import html
 
 # -----------------------------
 # PAGE CONFIGURATION
 # -----------------------------
 
 st.set_page_config(
-    page_title="Engineering Mechanics AI Tutor",
+    page_title="Engineering Mechanics AI Tutor — V3",
     page_icon="🏗️",
     layout="centered"
 )
@@ -149,13 +150,11 @@ Technical error:
 def encode_uploaded_image(uploaded_file):
     image_bytes = uploaded_file.getvalue()
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
-
     mime_type = uploaded_file.type or "image/jpeg"
-
     return f"data:{mime_type};base64,{base64_image}"
 
 # -----------------------------
-# IMAGE QUESTION SOLVER
+# IMAGE QUESTION SOLVER — V3
 # -----------------------------
 
 def solve_mechanics_image(uploaded_file, explanation_level):
@@ -173,14 +172,24 @@ Carefully inspect the uploaded Engineering Mechanics question and diagram.
 
 Explanation mode: {explanation_level}
 
+V3 GOAL:
+Do not only solve the question.
+First understand the mechanics model and build a Free-Body-Diagram analysis.
+
 Your tasks:
 1. Read the complete problem statement.
 2. Inspect the complete engineering diagram.
-3. Identify all forces, directions, angles, dimensions, supports, and labels.
-4. Determine all known and unknown quantities.
-5. Select the correct Engineering Mechanics principle.
-6. Solve the problem accurately.
-7. Check the final result.
+3. Detect the most likely Engineering Mechanics topic.
+4. Estimate the difficulty as Beginner, Intermediate, or Advanced.
+5. Identify the body, particle, joint, member, beam, or system that should be isolated.
+6. Identify every external force acting on the isolated body.
+7. Identify support reactions, cable tensions, weights, applied loads, and relevant angles.
+8. State useful x-y axes for the FBD.
+9. Explain the FBD in short student-friendly language.
+10. Determine all known and unknown quantities.
+11. Select the correct Engineering Mechanics principle.
+12. Solve the problem accurately.
+13. Check the final result.
 
 IMPORTANT:
 Return ONLY valid JSON.
@@ -193,6 +202,10 @@ Do not write anything before or after the JSON.
 Use EXACTLY this structure:
 
 {{
+    "topic": "Short topic name",
+
+    "difficulty": "Beginner, Intermediate, or Advanced",
+
     "problem_understanding": "Maximum 2 short sentences explaining the problem.",
 
     "given_data": [
@@ -204,6 +217,20 @@ Use EXACTLY this structure:
         "Unknown quantity 1",
         "Unknown quantity 2"
     ],
+
+    "fbd": {{
+        "isolated_body": "What body, point, joint, member, beam, or system should be isolated",
+        "axes": "Recommended positive x and y directions",
+        "forces": [
+            "Force 1 — magnitude if known — direction — where it acts",
+            "Force 2 — magnitude if known — direction — where it acts"
+        ],
+        "support_reactions": [
+            "Reaction 1",
+            "Reaction 2"
+        ],
+        "fbd_note": "One or two short sentences explaining what the student should draw"
+    }},
 
     "concept": "Short explanation of the Engineering Mechanics concept.",
 
@@ -240,6 +267,14 @@ Use EXACTLY this structure:
 
 STRICT RULES:
 
+- Never invent a force, angle, support, dimension, or label that is not visible or logically implied.
+- If something important is unclear, explicitly say it is unclear.
+- For the FBD, include only EXTERNAL forces on the isolated body.
+- Do not include forces that are internal to the isolated body.
+- For a pin support, use two reaction components when appropriate.
+- For a roller support, use one reaction normal to the contact surface when appropriate.
+- For a cable, tension acts along the cable.
+- For weight, use W = mg downward through the center of gravity when applicable.
 - Each equation must be a separate item in the equations list.
 - Never combine multiple calculation steps into one string.
 - Use one equation per line.
@@ -252,8 +287,6 @@ STRICT RULES:
 - Use √ for square root
 - Do not use LaTeX.
 - Do not use programming notation such as F_x, F_y, cos(theta), sin(theta), or 500*cos(30).
-- Do not guess any unclear number, angle, force, dimension, label, or direction.
-- If important information is unreadable, clearly state what is unclear.
 - Follow Formula → Substitution → Calculation → Result.
 - Keep explanations concise.
 - Make the solution complete enough for a beginner to learn from.
@@ -281,7 +314,7 @@ STRICT RULES:
                 }
             ],
             response_format={"type": "json_object"},
-            temperature=0.7,
+            temperature=0.4,
             max_completion_tokens=4000
         )
 
@@ -294,11 +327,10 @@ STRICT RULES:
         }
 
 # -----------------------------
-# VISUAL IMAGE SOLUTION
+# TEXT CLEANER
 # -----------------------------
 
 def clean_equation(text):
-    """Convert AI notation into clean textbook notation."""
 
     if text is None:
         return ""
@@ -331,13 +363,11 @@ def clean_equation(text):
     for old, new in replacements.items():
         text = text.replace(old, new)
 
-    # Remove LaTeX formatting
     text = text.replace("_{", "")
     text = text.replace("{", "")
     text = text.replace("}", "")
     text = text.replace("\\", "")
 
-    # Engineering force notation
     text = text.replace("F_Ay", "FAy")
     text = text.replace("F_Dy", "FDy")
     text = text.replace("F_A", "FA")
@@ -347,16 +377,15 @@ def clean_equation(text):
     text = text.replace("F_x", "Fx")
     text = text.replace("F_y", "Fy")
 
-    # Clean spaces
-    text = " ".join(text.split())
+    return " ".join(text.split())
 
-    return text
-
+# -----------------------------
+# EQUATION DISPLAY
+# -----------------------------
 
 def display_equation(equation):
-    """Display one equation in a clean textbook-style box."""
 
-    equation = clean_equation(equation)
+    equation = html.escape(clean_equation(equation))
 
     st.markdown(
         f"""
@@ -377,6 +406,47 @@ def display_equation(equation):
         unsafe_allow_html=True
     )
 
+# -----------------------------
+# FBD INTELLIGENCE DISPLAY — V3
+# -----------------------------
+
+def display_fbd_analysis(fbd):
+
+    if not fbd:
+        return
+
+    st.markdown("### 🧩 Free-Body Diagram Analysis")
+
+    if fbd.get("isolated_body"):
+        st.markdown("**1. Isolate**")
+        st.write(clean_equation(fbd["isolated_body"]))
+
+    if fbd.get("axes"):
+        st.markdown("**2. Choose Axes**")
+        st.write(clean_equation(fbd["axes"]))
+
+    if fbd.get("forces"):
+        st.markdown("**3. External Forces**")
+        for force in fbd["forces"]:
+            st.write("• " + clean_equation(force))
+
+    if fbd.get("support_reactions"):
+        reactions = [
+            item for item in fbd["support_reactions"]
+            if item and clean_equation(item).lower() not in ["none", "not applicable", "n/a"]
+        ]
+
+        if reactions:
+            st.markdown("**4. Support Reactions**")
+            for reaction in reactions:
+                st.write("• " + clean_equation(reaction))
+
+    if fbd.get("fbd_note"):
+        st.info("✏️ " + clean_equation(fbd["fbd_note"]))
+
+# -----------------------------
+# VISUAL IMAGE SOLUTION — V3
+# -----------------------------
 
 def display_visual_solution(solution):
 
@@ -384,76 +454,48 @@ def display_visual_solution(solution):
         st.error("No solution was generated.")
         return
 
-    if "error" in solution:
+    if solution.get("error"):
         st.error(solution["error"])
         return
 
-    # -----------------------------
-    # Problem Understanding
-    # -----------------------------
+    # V3 quick classification
+    topic = clean_equation(solution.get("topic", "Engineering Mechanics"))
+    difficulty = clean_equation(solution.get("difficulty", ""))
+
+    if difficulty:
+        st.caption(f"Detected topic: {topic}  •  Difficulty: {difficulty}")
+    else:
+        st.caption(f"Detected topic: {topic}")
 
     if solution.get("problem_understanding"):
         st.markdown("### 📘 Problem Understanding")
-        st.write(
-            clean_equation(
-                solution["problem_understanding"]
-            )
-        )
-
-    # -----------------------------
-    # Given Data
-    # -----------------------------
+        st.write(clean_equation(solution["problem_understanding"]))
 
     if solution.get("given_data"):
         st.markdown("### 📌 Given Data")
-
         for item in solution["given_data"]:
-            st.write(
-                "• " + clean_equation(item)
-            )
-
-    # -----------------------------
-    # Required
-    # -----------------------------
+            st.write("• " + clean_equation(item))
 
     if solution.get("required"):
         st.markdown("### 🎯 Required")
-
         required = solution["required"]
 
         if isinstance(required, list):
             for item in required:
-                st.write(
-                    "• " + clean_equation(item)
-                )
+                st.write("• " + clean_equation(item))
         else:
-            st.write(
-                clean_equation(required)
-            )
+            st.write(clean_equation(required))
 
-    # -----------------------------
-    # Concept
-    # -----------------------------
+    # V3 flagship feature
+    display_fbd_analysis(solution.get("fbd"))
 
     if solution.get("concept"):
         st.markdown("### 🧠 Concept Used")
-        st.write(
-            clean_equation(
-                solution["concept"]
-            )
-        )
-
-    # -----------------------------
-    # Concept Equations
-    # -----------------------------
+        st.write(clean_equation(solution["concept"]))
 
     if solution.get("concept_equations"):
         for equation in solution["concept_equations"]:
             display_equation(equation)
-
-    # -----------------------------
-    # Solution
-    # -----------------------------
 
     if solution.get("steps"):
         st.markdown("### ✏️ Solution")
@@ -461,29 +503,17 @@ def display_visual_solution(solution):
         for step in solution["steps"]:
 
             if step.get("title"):
-                st.markdown(
-                    f"#### {clean_equation(step['title'])}"
-                )
+                st.markdown(f"#### {clean_equation(step['title'])}")
 
             if step.get("explanation"):
-                st.write(
-                    clean_equation(
-                        step["explanation"]
-                    )
-                )
+                st.write(clean_equation(step["explanation"]))
 
             if step.get("equations"):
                 for equation in step["equations"]:
                     display_equation(equation)
 
             if step.get("result"):
-                st.markdown(
-                    f"**✅ {clean_equation(step['result'])}**"
-                )
-
-    # -----------------------------
-    # Engineering Check
-    # -----------------------------
+                st.markdown(f"**✅ {clean_equation(step['result'])}**")
 
     if solution.get("engineering_check"):
         st.markdown("### 🔍 Engineering Check")
@@ -492,46 +522,24 @@ def display_visual_solution(solution):
 
         if isinstance(checks, list):
             for check in checks:
-                st.write(
-                    "✅ " + clean_equation(check)
-                )
+                st.write("✅ " + clean_equation(check))
         else:
-            st.write(
-                "✅ " + clean_equation(checks)
-            )
-
-    # -----------------------------
-    # Final Answer
-    # -----------------------------
+            st.write("✅ " + clean_equation(checks))
 
     if solution.get("final_answers"):
         st.markdown("### 🏁 Final Answer")
 
-        final_answers = solution["final_answers"]
+        answers = solution["final_answers"]
 
-        if isinstance(final_answers, list):
-            for answer in final_answers:
-                st.success(
-                    clean_equation(answer)
-                )
+        if isinstance(answers, list):
+            for answer in answers:
+                st.success(clean_equation(answer))
         else:
-            st.success(
-                clean_equation(final_answers)
-            )
-
-    # -----------------------------
-    # Key Learning Point
-    # -----------------------------
+            st.success(clean_equation(answers))
 
     if solution.get("key_learning_point"):
         st.markdown("### 💡 Key Learning Point")
-
-        st.info(
-            clean_equation(
-                solution["key_learning_point"]
-            )
-        )
-
+        st.info(clean_equation(solution["key_learning_point"]))
 
 # -----------------------------
 # USER INTERFACE
@@ -540,11 +548,11 @@ def display_visual_solution(solution):
 st.title("🏗️ Engineering Mechanics AI Tutor")
 
 st.write(
-    "Enter an Engineering Mechanics numerical problem "
-    "or upload a question photo to receive a step-by-step solution."
+    "Type an Engineering Mechanics problem or upload a question photo "
+    "for a step-by-step solution."
 )
 
-st.caption("MVP — Engineering Mechanics / Statics")
+st.caption("V3 — Statics Tutor + Free-Body Diagram Intelligence")
 
 explanation_level = st.radio(
     "Explanation Level",
@@ -596,7 +604,7 @@ if st.button(
 
     else:
 
-        with st.spinner("Analyzing and solving the problem..."):
+        with st.spinner("Analyzing mechanics model and solving..."):
 
             if uploaded_image is not None:
 
@@ -616,7 +624,7 @@ if st.button(
                 )
 
                 st.divider()
-                st.subheader("Solution")
+                st.subheader("✏️ Solution")
                 st.markdown(solution)
 
 # -----------------------------
@@ -624,7 +632,4 @@ if st.button(
 # -----------------------------
 
 st.divider()
-
-st.caption(
-    "Engineering Mechanics AI Tutor — MVP"
-)
+st.caption("Engineering Mechanics AI Tutor — V3")
