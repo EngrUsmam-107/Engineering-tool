@@ -219,19 +219,40 @@ Use EXACTLY this structure:
         "Unknown quantity 2"
     ],
 
-    "fbd": {{
-        "isolated_body": "What body, point, joint, member, beam, or system should be isolated",
-        "axes": "Recommended positive x and y directions",
+    "fbd": {
+        "diagram_type": "particle, beam, truss joint, or other",
+        "isolated_body": "Exact body or point label to isolate, copied from the diagram",
+        "axes": {
+            "positive_x_angle": 0,
+            "positive_y_angle": 90,
+            "description": "Short description of chosen axes"
+        },
         "forces": [
-            "Force 1 — magnitude if known — direction — where it acts",
-            "Force 2 — magnitude if known — direction — where it acts"
+            {
+                "name": "FA",
+                "label": "FA = 4 kN",
+                "magnitude": 4,
+                "unit": "kN",
+                "angle_from_positive_x": 60,
+                "type": "applied force",
+                "direction_description": "60° above +x",
+                "confidence": "high"
+            }
         ],
         "support_reactions": [
-            "Reaction 1",
-            "Reaction 2"
+            {
+                "name": "RA",
+                "label": "RA",
+                "magnitude": null,
+                "unit": "kN",
+                "angle_from_positive_x": 90,
+                "type": "support reaction",
+                "direction_description": "upward",
+                "confidence": "high"
+            }
         ],
-        "fbd_note": "One or two short sentences explaining what the student should draw"
-    }},
+        "fbd_note": "One short sentence explaining what the student should draw"
+    },
 
     "concept": "Short explanation of the Engineering Mechanics concept.",
 
@@ -269,13 +290,19 @@ Use EXACTLY this structure:
 STRICT RULES:
 
 - Never invent a force, angle, support, dimension, or label that is not visible or logically implied.
-- If something important is unclear, explicitly say it is unclear.
-- For the FBD, include only EXTERNAL forces on the isolated body.
-- Do not include forces that are internal to the isolated body.
+- Copy the isolated point/body label exactly from the diagram. Do not substitute a different letter.
+- Determine force direction from the ARROWHEAD in the original diagram, not merely from the member/cable geometry.
+- For every force, return a numeric angle measured counterclockwise from the positive x-axis.
+- Horizontal right = 0°, horizontal left = 180°, vertical up = 90°, vertical down = 270°.
+- 45° above -x = 135°. 45° below +x = 315°.
+- For angled forces, use the correct quadrant and the angle shown in the original diagram.
+- If a direction is genuinely unclear, use null and state that it is unclear. Never guess.
+- Do not use generic or arbitrary arrow directions.
+- For a cable, tension acts along the cable, but still follow the actual force direction shown/required.
+- For weight, use W = mg downward through the center of gravity when applicable.
 - For a pin support, use two reaction components when appropriate.
 - For a roller support, use one reaction normal to the contact surface when appropriate.
-- For a cable, tension acts along the cable.
-- For weight, use W = mg downward through the center of gravity when applicable.
+- For the FBD, include only EXTERNAL forces on the isolated body.
 - Each equation must be a separate item in the equations list.
 - Never combine multiple calculation steps into one string.
 - Use one equation per line.
@@ -408,131 +435,121 @@ def display_equation(equation):
     )
 
 # -----------------------------
-# AUTOMATIC FBD RENDERER — V3.2
+# AUTOMATIC FBD RENDERER — V3.2.1
 # -----------------------------
 
 def render_fbd_diagram(fbd):
-    """
-    Render a simple engineering-style Free-Body Diagram from the
-    structured FBD information returned by the vision model.
-
-    This first V3.2 renderer is designed for particle / knot problems.
-    """
+    """Render the FBD using AI-detected force directions."""
 
     if not fbd:
         return None
 
-    forces = fbd.get("forces", [])
-    reactions = fbd.get("support_reactions", [])
+    forces = []
 
-    # Combine force/reaction descriptions for rendering
-    items = []
-    for item in forces:
-        if item:
-            items.append(clean_equation(item))
+    for item in fbd.get("forces", []):
+        if isinstance(item, dict):
+            forces.append(item)
 
-    for item in reactions:
-        if item:
-            cleaned = clean_equation(item)
-            if cleaned.lower() not in ["none", "not applicable", "n/a"]:
-                items.append(cleaned)
+    for item in fbd.get("support_reactions", []):
+        if isinstance(item, dict):
+            forces.append(item)
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(8, 5))
+    if not forces:
+        return None
 
-    # Coordinate system
-    ax.set_xlim(-1.6, 1.6)
-    ax.set_ylim(-1.35, 1.35)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(-1.45, 1.45)
+    ax.set_ylim(-1.45, 1.45)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # Central particle / knot
-    ax.scatter([0], [0], s=280, zorder=5)
+    body = clean_equation(fbd.get("isolated_body", "O")) or "O"
+
+    # Isolated particle
+    ax.scatter([0], [0], s=260, zorder=5)
     ax.text(
-        0,
-        -0.18,
-        "E",
-        ha="center",
-        va="top",
-        fontsize=13,
-        fontweight="bold"
+        0, -0.20, body,
+        ha="center", va="top",
+        fontsize=13, fontweight="bold"
     )
 
-    # Draw coordinate axes
+    def unit_vector(angle):
+        import math
+        rad = math.radians(float(angle))
+        return math.cos(rad), math.sin(rad)
+
+    axes = fbd.get("axes", {})
+    x_angle = axes.get("positive_x_angle", 0)
+    y_angle = axes.get("positive_y_angle", 90)
+
+    ux, uy = unit_vector(x_angle)
+    vx, vy = unit_vector(y_angle)
+
+    # Axes
     ax.annotate(
-        "",
-        xy=(1.25, -1.0),
-        xytext=(0.55, -1.0),
-        arrowprops=dict(arrowstyle="->", linewidth=1.5)
+        "", xy=(ux * 0.65, uy * 0.65),
+        xytext=(ux * 0.10, uy * 0.10),
+        arrowprops=dict(arrowstyle="->", linewidth=1.3)
     )
-    ax.text(1.32, -1.0, "+x", va="center", fontsize=11)
+    ax.text(ux * 0.78, uy * 0.78, "+x", fontsize=10)
 
     ax.annotate(
-        "",
-        xy=(0.55, -0.25),
-        xytext=(0.55, -1.0),
-        arrowprops=dict(arrowstyle="->", linewidth=1.5)
+        "", xy=(vx * 0.65, vy * 0.65),
+        xytext=(vx * 0.10, vy * 0.10),
+        arrowprops=dict(arrowstyle="->", linewidth=1.3)
     )
-    ax.text(0.55, -0.15, "+y", ha="center", fontsize=11)
+    ax.text(vx * 0.78, vy * 0.78, "+y", fontsize=10)
 
-    # Default force directions.
-    # These are intentionally simple and deterministic for V3.2.1.
-    # The AI's detailed FBD analysis remains visible below the diagram.
-    directions = [
-        (1.0, 0.75),
-        (-0.9, 0.75),
-        (1.0, -0.65),
-        (-1.0, -0.65),
-        (0.0, -1.0),
-        (0.0, 1.0),
-    ]
+    import math
 
-    label_positions = [
-        (1.08, 0.82),
-        (-1.08, 0.82),
-        (1.08, -0.72),
-        (-1.08, -0.72),
-        (0.12, -1.12),
-        (0.12, 1.10),
-    ]
+    for force in forces[:8]:
 
-    for i, item in enumerate(items[:6]):
-        dx, dy = directions[i]
-        lx, ly = label_positions[i]
+        angle = force.get("angle_from_positive_x")
 
+        if angle is None:
+            continue
+
+        try:
+            angle = float(angle)
+        except (TypeError, ValueError):
+            continue
+
+        rad = math.radians(angle)
+        dx = math.cos(rad)
+        dy = math.sin(rad)
+
+        # Force arrow starts at the isolated point and follows the
+        # direction reported by the vision model.
         ax.annotate(
             "",
-            xy=(dx * 0.92, dy * 0.92),
-            xytext=(dx * 0.12, dy * 0.12),
+            xy=(dx * 0.98, dy * 0.98),
+            xytext=(dx * 0.08, dy * 0.08),
             arrowprops=dict(
                 arrowstyle="->",
-                linewidth=2
+                linewidth=2.5
             )
         )
 
-        # Keep labels compact so the diagram remains readable
-        label = item
-        if len(label) > 42:
-            label = label[:39] + "..."
+        label = force.get("label") or force.get("name") or "Force"
+        label = clean_equation(label)
 
+        if len(label) > 30:
+            label = label[:27] + "..."
+
+        # Slight radial offset keeps labels away from arrowheads.
         ax.text(
-            lx,
-            ly,
+            dx * 1.13,
+            dy * 1.13,
             label,
             ha="center",
             va="center",
-            fontsize=9
+            fontsize=10,
+            fontweight="bold"
         )
 
-    title = "Free-Body Diagram"
-    isolated = clean_equation(fbd.get("isolated_body", ""))
-
-    if isolated:
-        title += f" — {isolated}"
-
     ax.set_title(
-        title,
-        fontsize=14,
+        f"Free-Body Diagram — {body}",
+        fontsize=15,
         fontweight="bold",
         pad=12
     )
@@ -542,7 +559,6 @@ def render_fbd_diagram(fbd):
 
 
 def display_fbd_diagram(fbd):
-    """Display the generated V3.2 FBD diagram."""
 
     if not fbd:
         return
@@ -551,13 +567,18 @@ def display_fbd_diagram(fbd):
 
     fig = render_fbd_diagram(fbd)
 
-    if fig is not None:
-        st.pyplot(fig, use_container_width=True)
-        plt.close(fig)
+    if fig is None:
+        st.warning(
+            "The AI could not determine enough force directions to safely draw the FBD."
+        )
+        return
+
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
 
     st.caption(
-        "V3.2 generated this diagram from the AI's detected force information. "
-        "Always compare it with the original question before using it in an exam."
+        "The diagram uses the force directions detected from the original question. "
+        "Always compare it with the source diagram."
     )
 
 
@@ -641,10 +662,10 @@ def display_visual_solution(solution):
         else:
             st.write(clean_equation(required))
 
-    # V3.2 flagship feature: actual generated FBD
+    # V3.2.1 flagship feature: geometry-aware generated FBD
     display_fbd_diagram(solution.get("fbd"))
 
-    # Keep the textual FBD analysis for transparency and learning
+    # Keep textual FBD analysis for transparency and learning
     display_fbd_analysis(solution.get("fbd"))
 
     if solution.get("concept"):
@@ -710,7 +731,7 @@ st.write(
     "for a step-by-step solution."
 )
 
-st.caption("V3.2 — Statics Tutor + Automatic Free-Body Diagram")
+st.caption("V3.2.1 — Geometry-Aware Free-Body Diagram")
 
 explanation_level = st.radio(
     "Explanation Level",
@@ -790,4 +811,4 @@ if st.button(
 # -----------------------------
 
 st.divider()
-st.caption("Engineering Mechanics AI Tutor — V3.2")
+st.caption("Engineering Mechanics AI Tutor — V3.2.1")
