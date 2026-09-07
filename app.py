@@ -202,7 +202,15 @@ def display_structured(d):
     dc=d.get("data_check",{})
     if isinstance(dc,dict):
         st.markdown("### 🔍 Data Check")
-        status=clean(dc.get("status","")); st.success("Data status: "+status.title()) if status=="verified" else st.warning("Data status: "+status.title())
+        status = clean(dc.get("status", "")).lower()
+        if status == "verified":
+            st.success("Data status: Verified")
+        elif status == "uncertain":
+            st.warning("Data status: Uncertain")
+        elif status == "insufficient":
+            st.error("Data status: Insufficient information")
+        else:
+            st.info("Data status: " + (status.title() if status else "Not specified"))
         for x in dc.get("notes",[]): st.write("• "+clean(x))
         for x in dc.get("assumptions",[]): st.write("• Assumption: "+clean(x))
     if d.get("given_data"):
