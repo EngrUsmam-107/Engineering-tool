@@ -9,7 +9,7 @@ from .utils import clean, encode_image, parse_json
 
 
 TEXT_MODEL = "openai/gpt-oss-120b"
-VISION_MODEL = "qwen/qwen3.6-27b"
+VISION_MODEL = "qwen/qwen3.8-27b"
 
 
 def get_client():
