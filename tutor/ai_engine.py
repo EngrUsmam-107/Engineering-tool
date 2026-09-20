@@ -46,59 +46,49 @@ RULES:
 
 
 SOLUTION_JSON_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "topic",
-        "difficulty",
-        "problem_understanding",
-        "data_check",
-        "given_data",
-        "required",
-        "fbd",
-        "mechanics_model",
-        "concept",
-        "steps",
-        "final_answers",
-        "engineering_check",
-        "key_learning_point"
-    ],
-    "properties": {
-        "topic": {
-            "type": "string"
-        },
-        "difficulty": {
-            "type": "string"
-        },
-        "problem_understanding": {
-            "type": "string"
-        },
-        "data_check": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": [
-                "status",
-                "notes",
-                "assumptions"
-            ],
-            "properties": {
-                "status": {
-                    "type": "string"
-                },
-                "notes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "assumptions": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
+    "steps": {
+    "type": "array",
+    "items": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "title",
+            "explanation",
+            "equations",
+            "result"
+        ],
+        "properties": {
+            "title": {
+                "type": "string"
+            },
+            "explanation": {
+                "type": "string"
+            },
+            "equations": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "label",
+                        "expression"
+                    ],
+                    "properties": {
+                        "label": {
+                            "type": "string"
+                        },
+                        "expression": {
+                            "type": "string"
+                        }
                     }
                 }
+            },
+            "result": {
+                "type": "string"
             }
-        },
+        }
+    }
+}
         "given_data": {
             "type": "array",
             "items": {
@@ -299,7 +289,32 @@ SOLUTION_JSON_SCHEMA = {
         }
     }
 }
-
+         "completion": {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "requested_quantities",
+        "solved_quantities",
+        "complete"
+    ],
+    "properties": {
+        "requested_quantities": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "solved_quantities": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "complete": {
+            "type": "boolean"
+        }
+    }
+}
 
 VISION_SYSTEM = """
 You are an Engineering Mechanics professor and a careful engineering-diagram analyst.
@@ -370,6 +385,43 @@ TEACHING REQUIREMENTS:
   FRx = F1x + F2x
   FR = √(FRx² + FRy²)
 - Return ONLY the structured solution requested by the JSON schema.
+SOLUTION COMPLETION RULE:
+
+Before solving, identify exactly what the question asks for.
+
+Create a mental checklist of every requested quantity.
+
+Examples:
+
+If the question asks:
+"Determine the resultant force"
+
+you MUST calculate:
+1. x-component of resultant
+2. y-component of resultant
+3. magnitude of resultant
+4. direction of resultant
+
+If the question asks:
+"Determine the magnitude and direction of the resultant"
+
+you MUST provide BOTH magnitude AND direction.
+
+If the question asks for a mass:
+1. calculate the required force/weight if necessary
+2. then calculate mass
+3. give mass as the final requested answer
+
+If the question asks for an unknown force:
+1. determine its components if required
+2. solve its magnitude
+3. solve its direction if requested
+
+NEVER stop after an intermediate calculation.
+
+A component calculation is NOT a final answer when the problem asks for a resultant.
+
+The final answer must directly answer the wording of the original question.
 """
 
 
@@ -528,6 +580,38 @@ If the problem asks for a resultant,
 calculate both magnitude and direction.
 
 Return only the JSON object matching the supplied schema.
+FORCE DESCRIPTION RULE:
+
+Never describe a force using a compressed sentence if a beginner could misunderstand it.
+
+Instead of:
+
+"F1 = 500 N — 30° above +x"
+
+write the information conceptually as:
+
+"Force F₁ has a magnitude of 500 N."
+
+"F₁ acts 30° above the positive x-axis."
+
+"Therefore, F₁ lies in the first quadrant."
+
+For each force explain:
+
+1. magnitude
+2. direction
+3. reference axis
+4. quadrant
+5. component signs
+
+Example:
+
+Force F₁:
+Magnitude = 500 N
+Direction = 30° above +x
+Quadrant = First quadrant
+Fx₁ = positive
+Fy₁ = positive
 """
 
     try:
