@@ -42,6 +42,44 @@ RULES:
 8. Each numerical step should follow Formula → Substitution → Calculation → Result.
 9. Check units, signs, quadrant/direction, trigonometry, equilibrium, and arithmetic.
 10. Do not expose hidden reasoning or <think> content.
+10. NEVER stop after finding individual force components when the problem asks for a resultant.
+11. For a resultant-force problem, ALWAYS continue in this exact order:
+    a) Resolve every force into Fx and Fy.
+    b) Add all x-components to obtain FRx.
+    c) Add all y-components to obtain FRy.
+    d) Calculate resultant magnitude:
+       FR = √(FRx² + FRy²)
+    e) Calculate the resultant direction.
+    f) Determine the correct quadrant from the signs of FRx and FRy.
+    g) State the final resultant magnitude AND direction clearly.
+12. The final answer must directly answer every quantity requested in the original question.
+13. Never present only intermediate component values as the final answer.
+14. For direction, do not use tan⁻¹(FRy/FRx) blindly. Check the signs of FRx and FRy and report the physically correct quadrant/direction.
+15. For every requested resultant, show:
+    Component equations → component values → FRx/FRy → magnitude → direction → final answer.
+    RESULTANT-FORCE COMPLETION RULE:
+
+If the problem asks for the resultant force, equivalent force, magnitude of resultant,
+direction of resultant, or resultant magnitude and direction, the solution is incomplete
+unless BOTH of these are calculated:
+
+1. Resultant magnitude:
+FR = √(FRx² + FRy²)
+
+2. Resultant direction:
+θ = tan⁻¹(FRy / FRx)
+
+Then verify the quadrant using the signs of FRx and FRy.
+
+The final answer must explicitly state:
+"Resultant force = ___ N"
+"Direction = ___° ___"
+
+Do not end the solution at:
+Fx1, Fy1, Fx2, Fy2
+or
+FRx, FRy.
+Those are intermediate results only.
 """
 
 
@@ -205,14 +243,13 @@ SOLUTION_JSON_SCHEMA = {
                 }
             }
         },
-        "mechanics_model": {
-            "type": "object",
-            "additionalProperties": False,
-            "required": [
-                "relationships",
-                "unknowns",
-                "equations"
-            ],
+        "mechanics_model":{
+    "relationships":["short relationship"],
+    "unknowns":["FR"],
+    "equations":["ΣFx = 0 or FRx = Fx1 + Fx2 + ...",
+                 "ΣFy = 0 or FRy = Fy1 + Fy2 + ..."],
+    "resultant_required":true
+},
             "properties": {
                 "relationships": {
                     "type": "array",
@@ -237,19 +274,17 @@ SOLUTION_JSON_SCHEMA = {
         "concept": {
             "type": "string"
         },
-        "steps": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": [
-                    "title",
-                    "explanation",
-                    "formula",
-                    "substitution",
-                    "calculation",
-                    "result"
-                ],
+       "steps":[
+    {
+        "step_number":1,
+        "title":"short teaching title",
+        "explanation":"2-3 clear student-friendly sentences explaining why this step is needed",
+        "formula":"one equation only",
+        "substitution":"one equation only",
+        "calculation":"one equation only",
+        "result":"one clear result"
+    }
+],
                 "properties": {
                     "title": {
                         "type": "string"
